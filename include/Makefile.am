@@ -1,0 +1,19 @@
+teaincdir=$(includedir)/tea
+teainc_HEADERS=\
+	tea.h\
+	t_types.h\
+	t_utils.h\
+	t_array.h\
+	t_sort.h\
+	t_bsearch.h\
+	t_queue.h\
+	t_set.h\
+	t_hash.h\
+	t_alloc.h\
+	t_auto.h\
+	t_re.h\
+	t_debug.h\
+	memwatch.h
+
+noinst_HEADERS=\
+	template.h
