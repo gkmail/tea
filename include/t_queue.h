@@ -33,7 +33,7 @@
 	#define T_QUEUE_FREE(ptr) free(ptr)
 #endif
 
-#ifdef T_QUEUE_ELEM_DESTROY
+#ifdef T_QUEUE_ELEM_DEINIT
 static T_INLINE void
 T_QUEUE_FUNC(queue_element_destroy)(T_QUEUE_TYPE *q)
 {
@@ -42,9 +42,9 @@ T_QUEUE_FUNC(queue_element_destroy)(T_QUEUE_TYPE *q)
 	int pos = q->T_QUEUE_NAME.head;
 
 	while(cnt--){
-		elem = q->T_QUEUE_NAME.buff[pos++];
-		T_QUEUE_ELEM_DESTROY(elem);
-		pos % = q->T_QUEUE_NAME.size;
+		elem = &q->T_QUEUE_NAME.buff[pos++];
+		T_QUEUE_ELEM_DEINIT(elem);
+		pos %= q->T_QUEUE_NAME.size;
 	}
 }
 #else
@@ -54,7 +54,7 @@ T_QUEUE_FUNC(queue_element_destroy)(T_QUEUE_TYPE *q)
 }
 #endif
 
-static void
+static T_Result
 T_QUEUE_FUNC(queue_init)(T_QUEUE_TYPE *q)
 {
 	T_ASSERT(q);
@@ -64,6 +64,7 @@ T_QUEUE_FUNC(queue_init)(T_QUEUE_TYPE *q)
 	q->T_QUEUE_NAME.head = 0;
 	q->T_QUEUE_NAME.buff = NULL;
 
+	return T_OK;
 }
 
 static void
@@ -182,8 +183,32 @@ T_QUEUE_FUNC(queue_pop_back)(T_QUEUE_TYPE *q, T_QUEUE_ELEM_TYPE *elem)
 	q->T_QUEUE_NAME.nmem--;
 }
 
+static T_INLINE T_QUEUE_ELEM_TYPE*
+T_QUEUE_FUNC(queue_front)(T_QUEUE_TYPE *q, int n)
+{
+	int pos;
+
+	T_ASSERT(q && (n < q->T_QUEUE_NAME.nmem));
+
+	pos = (q->T_QUEUE_NAME.head + n) % q->T_QUEUE_NAME.size;
+	return &q->T_QUEUE_NAME.buff[pos];
+}
+
+static T_INLINE T_QUEUE_ELEM_TYPE*
+T_QUEUE_FUNC(queue_back)(T_QUEUE_TYPE *q, int n)
+{
+	int pos;
+
+	T_ASSERT(q && (n < q->T_QUEUE_NAME.nmem));
+
+	pos = (q->T_QUEUE_NAME.head + q->T_QUEUE_NAME.nmem - n - 1) % q->T_QUEUE_NAME.size;
+	return &q->T_QUEUE_NAME.buff[pos];
+}
+
 #undef T_QUEUE_REALLOC
 #undef T_QUEUE_TYPE
 #undef T_QUEUE_ELEM_TYPE
 #undef T_QUEUE_NAME
 #undef T_QUEUE_FUNC
+#undef T_QUEUE_ELEM_DEINIT
+

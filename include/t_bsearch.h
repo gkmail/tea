@@ -29,7 +29,7 @@
 	#define T_BSEARCH_CMP(p1, p2) ((int)(*(p1) - *(p2)))
 #endif
 
-static T_BSEARCH_TYPE*
+static T_ID
 T_BSEARCH_FUNC(bsearch)(T_BSEARCH_TYPE *aa, int n, T_BSEARCH_TYPE *key)
 {
 	int begin = 0;
@@ -39,7 +39,7 @@ T_BSEARCH_FUNC(bsearch)(T_BSEARCH_TYPE *aa, int n, T_BSEARCH_TYPE *key)
 	int v;
 
 	if(!aa && !n)
-		return NULL;
+		return -1;
 
 	T_ASSERT(aa && (n >= 0) && key);
 
@@ -48,7 +48,7 @@ T_BSEARCH_FUNC(bsearch)(T_BSEARCH_TYPE *aa, int n, T_BSEARCH_TYPE *key)
 
 		v = T_BSEARCH_CMP(key, aa + mid);
 		if(v == 0)
-			return aa + mid;
+			return mid;
 
 		if(v < 0)
 			end = mid;
@@ -57,9 +57,9 @@ T_BSEARCH_FUNC(bsearch)(T_BSEARCH_TYPE *aa, int n, T_BSEARCH_TYPE *key)
 	}
 
 	if(T_BSEARCH_CMP(key, aa + begin) == 0)
-		return aa + begin;
+		return begin;
 
-	return NULL;
+	return -1;
 }
 
 #undef T_BSEARCH_TYPE

@@ -40,8 +40,8 @@
 	#define T_ARRAY_FREE    T_SET_FREE
 #endif
 
-#ifdef T_SET_ELEM_DESTROY
-	#define T_ARRAY_ELEM_DESTROY T_SET_ELEM_DESTROY
+#ifdef T_SET_ELEM_DEINIT
+	#define T_ARRAY_ELEM_DEINIT T_SET_ELEM_DEINIT
 #endif
 
 #include "t_array.h"
@@ -70,10 +70,10 @@
 
 #include "t_bsearch.h"
 
-static T_INLINE void
+static T_INLINE T_Result
 T_SET_FUNC(set_init)(T_SET_TYPE *set)
 {
-	T_SET_FUNC(array_init)(set);
+	return T_SET_FUNC(array_init)(set);
 }
 
 static T_INLINE void
@@ -86,6 +86,12 @@ static T_INLINE void
 T_SET_FUNC(set_reinit)(T_SET_TYPE *set)
 {
 	T_SET_FUNC(array_reinit)(set);
+}
+
+static T_INLINE void
+T_SET_FUNC(set_clear)(T_SET_TYPE *set)
+{
+	T_SET_FUNC(array_clear)(set);
 }
 
 static T_INLINE int
@@ -115,29 +121,22 @@ T_SET_FUNC(set_sort)(T_SET_TYPE *set)
 static T_ID
 T_SET_FUNC(set_search)(T_SET_TYPE *set, T_SET_ELEM_TYPE *elem)
 {
-	T_SET_ELEM_TYPE *old;
-
 	T_ASSERT(set && elem);
 
-	old = T_SET_FUNC(bsearch)(set->T_SET_NAME.buff, set->T_SET_NAME.nmem, elem);
-	if(old)
-		return old - set->T_SET_NAME.buff;
-	
-	return -1;
+	return T_SET_FUNC(bsearch)(set->T_SET_NAME.buff, set->T_SET_NAME.nmem, elem);
 }
 
 static T_Result
 T_SET_FUNC(set_add)(T_SET_TYPE *set, T_SET_ELEM_TYPE *elem, T_ID *rid)
 {
-	T_SET_ELEM_TYPE *old;
 	T_ID id;
 
 	T_ASSERT(set && elem);
 
-	old = T_SET_FUNC(bsearch)(set->T_SET_NAME.buff, set->T_SET_NAME.nmem, elem);
-	if(old){
+	id = T_SET_FUNC(bsearch)(set->T_SET_NAME.buff, set->T_SET_NAME.nmem, elem);
+	if(id >= 0){
 		if(rid)
-			*rid = old - set->T_SET_NAME.buff;
+			*rid = id;
 		return 0;
 	}
 
@@ -154,7 +153,7 @@ T_SET_FUNC(set_add)(T_SET_TYPE *set, T_SET_ELEM_TYPE *elem, T_ID *rid)
 static T_Result
 T_SET_FUNC(set_union)(T_SET_TYPE *s1, T_SET_TYPE *s2)
 {
-	T_SET_ELEM_TYPE *e, *eend, *old;
+	T_SET_ELEM_TYPE *e, *eend;
 	T_ID id;
 	int cnt;
 
@@ -165,8 +164,8 @@ T_SET_FUNC(set_union)(T_SET_TYPE *s1, T_SET_TYPE *s2)
 	cnt  = s1->T_SET_NAME.nmem;
 
 	while(e < eend){
-		old = T_SET_FUNC(bsearch)(s1->T_SET_NAME.buff, cnt, e);
-		if(!old){
+		id = T_SET_FUNC(bsearch)(s1->T_SET_NAME.buff, cnt, e);
+		if(id < 0){
 			id = T_SET_FUNC(array_add)(s1, e);
 			if(id < 0)
 				return id;
@@ -181,7 +180,7 @@ T_SET_FUNC(set_union)(T_SET_TYPE *s1, T_SET_TYPE *s2)
 static T_Result
 T_SET_FUNC(set_diff)(T_SET_TYPE *s1, T_SET_TYPE *s2)
 {
-	T_SET_ELEM_TYPE *e, *eend, *old;
+	T_SET_ELEM_TYPE *e, *eend;
 	T_SET_TYPE ns;
 	T_ID id;
 	int cnt;
@@ -195,8 +194,8 @@ T_SET_FUNC(set_diff)(T_SET_TYPE *s1, T_SET_TYPE *s2)
 	cnt  = s2->T_SET_NAME.nmem;
 
 	while(e < eend){
-		old = T_SET_FUNC(bsearch)(s2->T_SET_NAME.buff, cnt, e);
-		if(!old){
+		id = T_SET_FUNC(bsearch)(s2->T_SET_NAME.buff, cnt, e);
+		if(id < 0){
 			id = T_SET_FUNC(array_add)(&ns, e);
 			if(id < 0){
 				T_SET_FUNC(set_deinit)(&ns);
@@ -245,5 +244,5 @@ T_SET_FUNC(set_iter_last)(T_SetIter *iter)
 #undef T_SET_FUNC
 #undef T_SET_REALLOC
 #undef T_SET_FREE
-#undef T_SET_ELEM_DESTROY
+#undef T_SET_ELEM_DEINIT
 

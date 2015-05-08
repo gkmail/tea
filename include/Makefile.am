@@ -4,6 +4,7 @@ teainc_HEADERS=\
 	t_types.h\
 	t_utils.h\
 	t_array.h\
+	t_slist.h\
 	t_sort.h\
 	t_bsearch.h\
 	t_queue.h\
@@ -12,6 +13,8 @@ teainc_HEADERS=\
 	t_alloc.h\
 	t_auto.h\
 	t_re.h\
+	t_lex.h\
+	t_parser.h\
 	t_debug.h\
 	memwatch.h
 

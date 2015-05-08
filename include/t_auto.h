@@ -30,6 +30,7 @@ typedef int T_AutoSymbol;
 #define T_AUTO_EPSILON -1
 #define T_AUTO_BOL     -2
 #define T_AUTO_EOL     -3
+#define T_AUTO_REDUCE  -4
 
 typedef struct{
 	T_ID       edges;
@@ -56,6 +57,10 @@ typedef struct{
 	T_ARRAY_DECL(T_AutoEdge,  edges);
 }T_Auto;
 
+typedef int T_AutoFlags;
+#define T_AUTO_FL_IGNORE_CASE 1
+#define T_AUTO_FL_NO_BOL      2
+
 extern T_Result t_auto_init(T_Auto *aut);
 extern void     t_auto_deinit(T_Auto *aut);
 extern T_Auto*  t_auto_create(void);
@@ -65,6 +70,7 @@ extern T_ID     t_auto_add_edge(T_Auto *aut, T_ID from, T_ID to, T_AutoSymbol sy
 extern T_AutoState* t_auto_get_state(T_Auto *aut, T_ID sid);
 extern T_AutoEdge*  t_auto_get_edge(T_Auto *aut, T_ID eid);
 extern T_Result     t_auto_to_dfa(T_Auto *nfa, T_Auto *dfa);
+extern void     t_auto_dump(T_Auto *aut);
 
 extern void     t_auto_mach_init(T_AutoMach *mach);
 extern T_ID     t_auto_mach_add_state(T_Auto *aut, T_AutoMach *mach, T_AutoData data);
@@ -72,9 +78,9 @@ extern T_ID     t_auto_mach_add_edge(T_Auto *aut, T_AutoMach *mach, T_ID from, T
 extern T_Result t_auto_mach_or(T_Auto *aut, T_AutoMach *mach, T_AutoMach *mor);
 extern T_Result t_auto_mach_link(T_Auto *aut, T_AutoMach *mach, T_AutoMach *ml);
 extern T_Result t_auto_mach_repeat(T_Auto *aut, T_AutoMach *mach, int min, int max);
-extern T_Result t_auto_mach_add_symbol(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol symbol);
-extern T_Result t_auto_mach_add_symbols(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol *symbol, int len);
-extern T_Result t_auto_mach_add_symbol_range(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol min, T_AutoSymbol max);
+extern T_Result t_auto_mach_add_symbol(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol symbol, T_AutoFlags flags);
+extern T_Result t_auto_mach_add_symbols(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol *symbol, int len, T_AutoFlags flags);
+extern T_Result t_auto_mach_add_symbol_range(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol min, T_AutoSymbol max, T_AutoFlags flags);
 
 #ifdef __cplusplus
 }

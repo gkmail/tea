@@ -21,6 +21,16 @@
 	#error T_ALLOC_TYPE has not been defined
 #endif
 
+#ifndef T_ALLOC_ARGS_DECL
+	#define T_ALLOC_ARGS_DECL    void
+#endif
+
+#ifndef T_ALLOC_ARGS
+	#define T_ALLOC_INIT_ARGS
+#else
+	#define T_ALLOC_INIT_ARGS , T_ALLOC_ARGS
+#endif
+
 #ifndef T_ALLOC_FUNC
 	#define T_ALLOC_FUNC(name) name
 #endif
@@ -34,7 +44,7 @@
 #endif
 
 #ifndef T_ALLOC_INIT
-	#define T_ALLOC_INIT(p)      T_OK
+	#define T_ALLOC_INIT(p...)   T_OK
 #endif
 
 #ifndef T_ALLOC_DEINIT
@@ -42,7 +52,7 @@
 #endif
 
 T_ALLOC_TYPE*
-T_ALLOC_FUNC(create)(void)
+T_ALLOC_FUNC(create)(T_ALLOC_ARGS_DECL)
 {
 	T_ALLOC_TYPE *type;
 
@@ -50,7 +60,7 @@ T_ALLOC_FUNC(create)(void)
 	if(!type)
 		return NULL;
 
-	if(T_ALLOC_INIT(type) < 0){
+	if(T_ALLOC_INIT(type T_ALLOC_INIT_ARGS) < 0){
 		T_ALLOC_FREE(type);
 		return NULL;
 	}
@@ -68,6 +78,11 @@ T_ALLOC_FUNC(destroy)(T_ALLOC_TYPE *type)
 }
 
 #undef T_ALLOC_TYPE
+#undef T_ALLOC_ARGS_DECL
+#ifdef T_ALLOC_ARGS
+	#undef T_ALLOC_ARGS
+#endif
+#undef T_ALLOC_INIT_ARGS
 #undef T_ALLOC_FUNC
 #undef T_ALLOC_MALLOC
 #undef T_ALLOC_FREE

@@ -345,7 +345,7 @@ t_auto_mach_repeat(T_Auto *aut, T_AutoMach *mach, int min, int max)
 
 	cnt = min;
 	if(max >= 0)
-		cnt += max;
+		cnt = max;
 	else
 		cnt++;
 
@@ -398,7 +398,7 @@ t_auto_mach_repeat(T_Auto *aut, T_AutoMach *mach, int min, int max)
 }
 
 T_Result
-t_auto_mach_add_symbol(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol symbol)
+t_auto_mach_add_symbol(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol symbol, T_AutoFlags flags)
 {
 	T_ID s, e;
 
@@ -415,13 +415,28 @@ t_auto_mach_add_symbol(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol symbol)
 	if((e = t_auto_mach_add_edge(aut, mach, mach->s_end, s, symbol)) < 0)
 		return e;
 
+	if(flags & T_AUTO_FL_IGNORE_CASE){
+		T_AutoSymbol csym = -1;
+
+		if(isupper(symbol)){
+			csym = tolower(symbol);
+		}else if(islower(symbol)){
+			csym = toupper(symbol);
+		}
+
+		if(csym != -1){
+			if((e = t_auto_mach_add_edge(aut, mach, mach->s_end, s, csym)) < 0)
+				return e;
+		}
+	}
+
 	mach->s_end = s;
 
 	return T_OK;
 }
 
 T_Result
-t_auto_mach_add_symbols(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol *symbol, int len)
+t_auto_mach_add_symbols(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol *symbol, int len, T_AutoFlags flags)
 {
 	T_AutoSymbol *sym, *send;
 	T_ID sb, se, e;
@@ -448,6 +463,21 @@ t_auto_mach_add_symbols(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol *symbol, int
 		if((e = t_auto_mach_add_edge(aut, mach, sb, se, *sym)) < 0)
 			return e;
 
+		if(flags & T_AUTO_FL_IGNORE_CASE){
+			T_AutoSymbol csym = -1;
+
+			if(isupper(*sym)){
+				csym = tolower(*sym);
+			}else if(islower(*sym)){
+				csym = toupper(*sym);
+			}
+
+			if(csym != -1){
+				if((e = t_auto_mach_add_edge(aut, mach, sb, se, csym)) < 0)
+					return e;
+			}
+		}
+
 		sym++;
 	}
 
@@ -457,7 +487,7 @@ t_auto_mach_add_symbols(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol *symbol, int
 }
 
 T_Result
-t_auto_mach_add_symbol_range(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol min, T_AutoSymbol max)
+t_auto_mach_add_symbol_range(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol min, T_AutoSymbol max, T_AutoFlags flags)
 {
 	T_AutoSymbol sym;
 	T_ID sb, se, e;
@@ -477,30 +507,27 @@ t_auto_mach_add_symbol_range(T_Auto *aut, T_AutoMach *mach, T_AutoSymbol min, T_
 	for(sym = min; sym <= max; sym++){
 		if((e = t_auto_mach_add_edge(aut, mach, sb, se, sym)) < 0)
 			return e;
+
+		if(flags & T_AUTO_FL_IGNORE_CASE){
+			T_AutoSymbol csym = -1;
+
+			if(isupper(sym)){
+				csym = tolower(sym);
+			}else if(islower(sym)){
+				csym = toupper(sym);
+			}
+
+			if(csym != -1){
+				if((e = t_auto_mach_add_edge(aut, mach, sb, se, csym)) < 0)
+					return e;
+			}
+		}
 	}
 
 	mach->s_end = se;
 
 	return T_OK;
 }
-
-typedef struct{
-	T_SET_DECL(T_ID, s);
-}SIDSet;
-#define T_SET_TYPE       SIDSet
-#define T_SET_ELEM_TYPE  T_ID
-#define T_SET_NAME       s
-#define T_SET_FUNC(name) sid_##name
-#include <t_set.h>
-
-typedef struct{
-	T_QUEUE_DECL(T_ID, q);
-}SIDQueue;
-#define T_QUEUE_TYPE       SIDQueue
-#define T_QUEUE_ELEM_TYPE  T_ID
-#define T_QUEUE_NAME       q
-#define T_QUEUE_FUNC(name) sid_##name
-#include <t_queue.h>
 
 static void
 auto_dump(T_Auto *aut)
@@ -527,10 +554,38 @@ auto_dump(T_Auto *aut)
 #endif
 }
 
+typedef struct{
+	T_SET_DECL(T_ID, a);
+}EpsArray;
+#define T_ARRAY_TYPE       EpsArray
+#define T_ARRAY_ELEM_TYPE  T_ID
+#define T_ARRAY_NAME       a
+#define T_ARRAY_FUNC(name) eps_##name
+#define T_ARRAY_CMP(p1, p2) (*(p1) - *(p2))
+#include <t_array.h>
+
+typedef struct{
+	T_SET_DECL(T_ID, s);
+}SIDSet;
+#define T_SET_TYPE       SIDSet
+#define T_SET_ELEM_TYPE  T_ID
+#define T_SET_NAME       s
+#define T_SET_FUNC(name) sid_##name
+#include <t_set.h>
+
+typedef struct{
+	T_QUEUE_DECL(T_ID, q);
+}SIDQueue;
+#define T_QUEUE_TYPE       SIDQueue
+#define T_QUEUE_ELEM_TYPE  T_ID
+#define T_QUEUE_NAME       q
+#define T_QUEUE_FUNC(name) sid_##name
+#include <t_queue.h>
+
 static T_Result
 nfa_clear_epsilon(T_Auto *nfa)
 {
-	SIDSet eps_set;
+	EpsArray eps_array;
 	SIDSet full_set;
 	SIDQueue q;
 	T_AutoState *s, *eps;
@@ -538,7 +593,7 @@ nfa_clear_epsilon(T_Auto *nfa)
 	T_ID sid, dest_sid, eps_sid, data_sid, eid;
 	T_Result r;
 
-	sid_set_init(&eps_set);
+	eps_array_init(&eps_array);
 	sid_set_init(&full_set);
 	sid_queue_init(&q);
 
@@ -549,7 +604,8 @@ nfa_clear_epsilon(T_Auto *nfa)
 		goto end;
 
 	do{
-		T_SetIter iter;
+		T_ArrayIter iter;
+		int eps_pos;
 		
 		sid_queue_pop_front(&q, &sid);
 		s = state_array_element(nfa, sid);
@@ -558,33 +614,46 @@ nfa_clear_epsilon(T_Auto *nfa)
 		T_DEBUG_I("check state %d", sid);
 
 		/*Find epsilon states.*/
-		eid = s->edges;
-		while(eid != -1){
-			e = edge_array_element(nfa, eid);
-			dest_sid = e->dest;
+		eps_pos = 0;
+		eps = s;
+		while(1){
+			eid = eps->edges;
+			while(eid != -1){
+				e = edge_array_element(nfa, eid);
+				dest_sid = e->dest;
 
-			if(e->symbol == T_AUTO_EPSILON){
-				T_DEBUG_I("add eps %d", dest_sid);
-				if((r = sid_set_add(&eps_set, &dest_sid, NULL)) < 0)
-					goto end;
-			}else{
-				if((r = sid_set_add(&full_set, &dest_sid, NULL)) < 0)
-					goto end;
-				if(r > 0){
-					T_DEBUG_I("add real %d", dest_sid);
-					if((r = sid_queue_push_back(&q, &dest_sid)) < 0)
+				if(e->symbol == T_AUTO_EPSILON){
+					T_DEBUG_I("add eps %d", dest_sid);
+					r = eps_array_find(&eps_array, &dest_sid);
+					if(r < 0){
+						if((r = eps_array_add(&eps_array, &dest_sid)) < 0)
+							goto end;
+					}
+				}else{
+					if((r = sid_set_add(&full_set, &dest_sid, NULL)) < 0)
 						goto end;
+					if(r > 0){
+						T_DEBUG_I("add real %d", dest_sid);
+						if((r = sid_queue_push_back(&q, &dest_sid)) < 0)
+							goto end;
+					}
 				}
+
+				eid = e->next;
 			}
 
-			eid = e->next;
+			if(eps_pos >= eps_array_length(&eps_array))
+				break;
+
+			eps_sid = *eps_array_element(&eps_array, eps_pos++);
+			eps = state_array_element(nfa, eps_sid);
 		}
 
 		/*Relink edges.*/
-		sid_set_iter_first(&eps_set, &iter);
-		while(!sid_set_iter_last(&iter)){
+		eps_array_iter_first(&eps_array, &iter);
+		while(!eps_array_iter_last(&iter)){
 
-			eps_sid = *sid_set_iter_data(&iter);
+			eps_sid = *eps_array_iter_data(&iter);
 			eps = state_array_element(nfa, eps_sid);
 
 			T_DEBUG_I("eps %d", eps_sid);
@@ -616,15 +685,15 @@ nfa_clear_epsilon(T_Auto *nfa)
 				data_sid = eps_sid;
 			}
 
-			sid_set_iter_next(&iter);
+			eps_array_iter_next(&iter);
 		}
 
-		sid_set_reinit(&eps_set);
+		eps_array_reinit(&eps_array);
 	}while(!sid_queue_empty(&q));
 
 	r = T_OK;
 end:
-	sid_set_deinit(&eps_set);
+	eps_array_deinit(&eps_array);
 	sid_set_deinit(&full_set);
 	sid_queue_deinit(&q);
 
@@ -682,7 +751,7 @@ typedef struct{
 #define T_HASH_ELEM_TYPE   T_ID
 #define T_HASH_KEY         sgrp_key
 #define T_HASH_EQUAL       sgrp_equal
-#define T_HASH_KEY_DESTROY sgrp_set_deinit
+#define T_HASH_KEY_DEINIT  sgrp_set_deinit
 #define T_HASH_FUNC(name)  sid_##name
 #include <t_hash.h>
 
@@ -696,8 +765,8 @@ typedef struct{
 #define T_HASH_NAME        h
 #define T_HASH_KEY_TYPE    T_AutoSymbol
 #define T_HASH_ELEM_TYPE   SGroup
-#define T_HASH_ELEM_DESTROY sgrp_set_deinit
-#define T_HASH_FUNC(name)   sym_##name
+#define T_HASH_ELEM_DEINIT sgrp_set_deinit
+#define T_HASH_FUNC(name)  sym_##name
 #include <t_hash.h>
 
 /*State group queue.*/
@@ -877,3 +946,8 @@ t_auto_to_dfa(T_Auto *nfa, T_Auto *dfa)
 	return T_OK;
 }
 
+void
+t_auto_dump(T_Auto *aut)
+{
+	auto_dump(aut);
+}

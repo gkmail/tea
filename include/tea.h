@@ -30,6 +30,7 @@ extern "C" {
 #include <ctype.h>
 #include <stdarg.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <assert.h>
 
 #if defined(MEMWATCH)
@@ -41,6 +42,8 @@ extern "C" {
 #include "t_debug.h"
 #include "t_auto.h"
 #include "t_re.h"
+#include "t_lex.h"
+#include "t_parser.h"
 
 #ifdef __cplusplus
 }

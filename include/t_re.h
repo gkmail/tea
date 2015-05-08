@@ -26,8 +26,10 @@ extern "C" {
 
 typedef T_Auto T_Re;
 
-extern T_Result   t_re_to_auto(T_Auto *aut, const char *str, int len, T_AutoData data, int *errcol);
-extern T_Re*      t_re_create(const char *str, int len, int *errcol);
+typedef int T_ReFlags;
+
+extern T_Result   t_re_to_auto(T_Auto *aut, const char *str, int len, T_AutoData data, T_ReFlags flags, int *errcol);
+extern T_Re*      t_re_create(const char *str, int len, T_ReFlags flags, int *errcol);
 extern void       t_re_destroy(T_Re *re);
 extern T_Result   t_re_match(T_Re *re, const char *str, int len, int *start, int *end);
 

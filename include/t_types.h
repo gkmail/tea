@@ -30,8 +30,12 @@ typedef unsigned char T_Bool;
 
 typedef enum{
 	T_OK = 0,
-	T_ERR_NOMEM   = -1,
-	T_ERR_SYNTAX  = -2
+	T_ERR_NOMEM    = -1000,
+	T_ERR_SYNTAX   = -1001,
+	T_ERR_ARG      = -1002,
+	T_ERR_NOTINIT  = -1003,
+	T_ERR_REINIT   = -1004,
+	T_ERR_IO       = -1005
 }T_Result;
 
 typedef int    T_ID;
@@ -92,6 +96,9 @@ typedef struct{
 	void *entry;
 	int   pos;
 }T_HashIter;
+
+#define T_SLIST_DECL(TYPE, NAME)\
+	TYPE *NAME
 
 #ifdef __cplusplus
 }

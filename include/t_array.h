@@ -33,7 +33,38 @@
 	#define T_ARRAY_FREE(ptr) free(ptr)
 #endif
 
-#ifdef T_ARRAY_ELEM_DESTROY
+#ifndef T_ARRAY_EQUAL
+	#ifdef T_ARRAY_CMP
+		#define T_ARRAY_EQUAL(p1, p2) (T_ARRAY_CMP(p1, p2) == 0)
+	#endif
+#endif
+
+#ifdef T_ARRAY_ELEM_INIT
+static T_INLINE T_Result
+T_ARRAY_FUNC(array_element_init)(T_ARRAY_TYPE *array, T_ID from, int cnt)
+{
+	T_ARRAY_ELEM_TYPE *elem, *eend;
+	T_Result r;
+
+	elem = array->T_ARRAY_NAME.buff + from;
+	eend = elem + cnt;
+	while(elem < eend){
+		if((r = T_ARRAY_ELEM_INIT(elem)) < 0)
+			return r;
+		elem++;
+	}
+
+	return T_OK;
+}
+#else
+static T_INLINE T_Result
+T_ARRAY_FUNC(array_element_init)(T_ARRAY_TYPE *array, T_ID from, int cnt)
+{
+	return T_OK;
+}
+#endif
+
+#ifdef T_ARRAY_ELEM_DEINIT
 static T_INLINE void
 T_ARRAY_FUNC(array_element_destroy)(T_ARRAY_TYPE *array)
 {
@@ -43,7 +74,7 @@ T_ARRAY_FUNC(array_element_destroy)(T_ARRAY_TYPE *array)
 	eend = elem + array->T_ARRAY_NAME.nmem;
 
 	while(elem < eend){
-		T_ARRAY_ELEM_DESTROY(elem);
+		T_ARRAY_ELEM_DEINIT(elem);
 		elem++;
 	}
 }
@@ -54,7 +85,7 @@ T_ARRAY_FUNC(array_element_destroy)(T_ARRAY_TYPE *array)
 }
 #endif
 
-static T_INLINE void
+static T_INLINE T_Result
 T_ARRAY_FUNC(array_init)(T_ARRAY_TYPE *array)
 {
 	T_ASSERT(array);
@@ -62,6 +93,8 @@ T_ARRAY_FUNC(array_init)(T_ARRAY_TYPE *array)
 	array->T_ARRAY_NAME.size = 0;
 	array->T_ARRAY_NAME.nmem = 0;
 	array->T_ARRAY_NAME.buff = NULL;
+
+	return T_OK;
 }
 
 static T_INLINE int
@@ -76,11 +109,11 @@ T_ARRAY_FUNC(array_add)(T_ARRAY_TYPE *array, T_ARRAY_ELEM_TYPE *data)
 {
 	T_ID id;
 
-	T_ASSERT(array);
+	T_ASSERT(array && data);
 
 	if(array->T_ARRAY_NAME.nmem >= array->T_ARRAY_NAME.size){
 		T_ARRAY_ELEM_TYPE *buf;
-		T_ID size = T_MAX(array->T_ARRAY_NAME.size * 2, 8);
+		int size = T_MAX(array->T_ARRAY_NAME.size * 2, 8);
 
 		buf = (T_ARRAY_ELEM_TYPE*)T_ARRAY_REALLOC(array->T_ARRAY_NAME.buff, size * sizeof(T_ARRAY_ELEM_TYPE));
 		if(!buf)
@@ -116,6 +149,14 @@ T_ARRAY_FUNC(array_reinit)(T_ARRAY_TYPE *array)
 	array->T_ARRAY_NAME.nmem = 0;
 }
 
+static void
+T_ARRAY_FUNC(array_clear)(T_ARRAY_TYPE *array)
+{
+	T_ASSERT(array);
+	T_ARRAY_FUNC(array_deinit)(array);
+	T_ARRAY_FUNC(array_init)(array);
+}
+
 static T_INLINE T_ARRAY_ELEM_TYPE*
 T_ARRAY_FUNC(array_element)(T_ARRAY_TYPE *array, T_ID index)
 {
@@ -123,6 +164,98 @@ T_ARRAY_FUNC(array_element)(T_ARRAY_TYPE *array, T_ID index)
 
 	return &array->T_ARRAY_NAME.buff[index];
 }
+
+static T_INLINE T_ARRAY_ELEM_TYPE*
+T_ARRAY_FUNC(array_element_resize)(T_ARRAY_TYPE *array, T_ID index)
+{
+	T_ASSERT(array && (index >= 0));
+
+	if(index >= array->T_ARRAY_NAME.nmem){
+		int add;
+
+		if(index >= array->T_ARRAY_NAME.size){
+			T_ARRAY_ELEM_TYPE *buf;
+			int size = T_MAX(array->T_ARRAY_NAME.size * 2, index + 1);
+
+			size = T_MAX(size, 16);
+
+			buf = (T_ARRAY_ELEM_TYPE*)T_ARRAY_REALLOC(array->T_ARRAY_NAME.buff, size * sizeof(T_ARRAY_ELEM_TYPE));
+			if(!buf)
+				return NULL;
+
+			array->T_ARRAY_NAME.buff = buf;
+			array->T_ARRAY_NAME.size = size;
+		}
+
+		add = index + 1 - array->T_ARRAY_NAME.nmem;
+		if(T_ARRAY_FUNC(array_element_init)(array, array->T_ARRAY_NAME.nmem, add) < 0)
+			return NULL;
+
+		array->T_ARRAY_NAME.nmem = index + 1;
+	}
+
+	return &array->T_ARRAY_NAME.buff[index];
+}
+
+#ifdef T_ARRAY_EQUAL
+static T_ID
+T_ARRAY_FUNC(array_find)(T_ARRAY_TYPE *array, T_ARRAY_ELEM_TYPE *v)
+{
+	T_ID id;
+
+	T_ASSERT(array && v);
+
+	for(id = 0; id < array->T_ARRAY_NAME.nmem; id++){
+		if(T_ARRAY_EQUAL(v, &array->T_ARRAY_NAME.buff[id]))
+			return id;
+	}
+
+	return -1;
+}
+
+static T_Result
+T_ARRAY_FUNC(array_add_unique)(T_ARRAY_TYPE *array, T_ARRAY_ELEM_TYPE *v, T_ID *rid)
+{
+	T_ID id;
+
+	T_ASSERT(array && v);
+
+	if ((id = T_ARRAY_FUNC(array_find)(array, v)) < 0){
+		if((id = T_ARRAY_FUNC(array_add)(array, v)) < 0)
+			return id;
+	}
+
+	if(rid)
+		*rid = id;
+	return T_OK;
+}
+
+#endif /*T_ARRAY_EQUAL*/
+
+#ifdef T_ARRAY_CMP
+static T_ID
+T_ARRAY_FUNC(array_search)(T_ARRAY_TYPE *array, T_ARRAY_ELEM_TYPE *v)
+{
+	T_ID id, min_id;
+	int cv, min_cv;
+
+	T_ASSERT(array && v);
+
+	min_id = -1;
+
+	for(id = 0; id < array->T_ARRAY_NAME.nmem; id++){
+		cv = T_ARRAY_CMP(v, &array->T_ARRAY_NAME.buff[id]);
+		if(cv == 0)
+			return id;
+		if((cv > 0) && ((min_id == -1) || (cv < min_cv))){
+			min_id = id;
+			min_cv = cv;
+		}
+	}
+
+	return min_id;
+}
+#endif /*T_ARRAY_CMP*/
 
 static T_INLINE void
 T_ARRAY_FUNC(array_iter_first)(T_ARRAY_TYPE *array, T_ArrayIter *iter)
@@ -157,5 +290,11 @@ T_ARRAY_FUNC(array_iter_last)(T_ArrayIter *iter)
 #undef T_ARRAY_FUNC
 #undef T_ARRAY_REALLOC
 #undef T_ARRAY_FREE
-#undef T_ARRAY_ELEM_DESTROY
-
+#undef T_ARRAY_ELEM_INIT
+#undef T_ARRAY_ELEM_DEINIT
+#ifdef T_ARRAY_CMP
+	#undef T_ARRAY_CMP
+#endif
+#ifdef T_ARRAY_EQUAL
+	#undef T_ARRAY_EQUAL
+#endif

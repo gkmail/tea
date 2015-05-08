@@ -34,6 +34,7 @@ typedef struct{
 	const char *str;
 	int         len;
 	int         pos;
+	T_ReFlags   flags;
 }ReInput;
 
 typedef struct{
@@ -418,7 +419,7 @@ re_parse_full_set(ReInput *inp, T_Auto *aut, T_AutoMach *mach)
 end:
 
 	if(r >= 0){
-		r = t_auto_mach_add_symbols(aut, mach, symbol_set_element(&s1, 0), symbol_set_length(&s1));
+		r = t_auto_mach_add_symbols(aut, mach, symbol_set_element(&s1, 0), symbol_set_length(&s1), inp->flags);
 	}
 
 	symbol_set_deinit(&s1);
@@ -438,7 +439,7 @@ re_parse_str(ReInput *inp, T_Auto *aut, T_AutoMach *mach)
 	if((ch = re_parse_char(inp, RE_PARSE_STRING)) < 0)
 		return ch;
 
-	if((r = t_auto_mach_add_symbol(aut, mach, ch)) < 0)
+	if((r = t_auto_mach_add_symbol(aut, mach, ch, inp->flags)) < 0)
 		return r;
 
 	do{
@@ -450,7 +451,7 @@ re_parse_str(ReInput *inp, T_Auto *aut, T_AutoMach *mach)
 		if((ch = re_parse_char(inp, RE_PARSE_STRING)) < 0)
 			return ch;
 
-		if((r = t_auto_mach_add_symbol(aut, mach, ch)) < 0)
+		if((r = t_auto_mach_add_symbol(aut, mach, ch, inp->flags)) < 0)
 			return r;
 	}while(1);
 
@@ -546,7 +547,7 @@ re_parse_single(ReInput *inp, T_Auto *aut, T_AutoMach *mach)
 			break;
 		case '.':
 			T_DEBUG_I(".");
-			if((r = t_auto_mach_add_symbol_range(aut, mach, 0, 255)) < 0)
+			if((r = t_auto_mach_add_symbol_range(aut, mach, 0, 255, inp->flags)) < 0)
 				return r;
 			break;
 		case '(':
@@ -563,7 +564,7 @@ re_parse_single(ReInput *inp, T_Auto *aut, T_AutoMach *mach)
 			re_unget(inp, ch);
 			if((ch = re_parse_char(inp, RE_PARSE_CHAR)) < 0)
 				return ch;
-			if((r = t_auto_mach_add_symbol(aut, mach, ch)) < 0)
+			if((r = t_auto_mach_add_symbol(aut, mach, ch, inp->flags)) < 0)
 				return r;
 			break;
 	}
@@ -609,11 +610,10 @@ re_parse_series(ReInput *inp, T_Auto *aut, T_AutoMach *mach)
 		T_AutoMach mnext;
 
 		ch = re_getch(inp);
+		re_unget(inp, ch);
 
-		if((ch == '|') || (ch == ')') || (ch == -1)){
-			re_unget(inp, ch);
+		if((ch == '|') || (ch == ')') || (ch == -1))
 			break;
-		}
 
 		if((r = re_parse_single(inp, aut, &mnext)) < 0)
 			return r;
@@ -690,8 +690,10 @@ re_parse_full(ReInput *inp, T_Auto *aut, T_AutoData data)
 	if(inp->pos != inp->len)
 		return T_ERR_SYNTAX;
 
-	if((e = t_auto_add_edge(aut, 0, mach.s_begin, T_AUTO_BOL)) < 0)
-		return e;
+	if(bol || !(inp->flags & T_AUTO_FL_NO_BOL)){
+		if((e = t_auto_add_edge(aut, 0, mach.s_begin, T_AUTO_BOL)) < 0)
+			return e;
+	}
 
 	if(!bol){
 		if((e = t_auto_add_edge(aut, 0, mach.s_begin, T_AUTO_EPSILON)) < 0)
@@ -712,7 +714,7 @@ re_parse_full(ReInput *inp, T_Auto *aut, T_AutoData data)
 }
 
 T_Result
-t_re_to_auto(T_Auto *aut, const char *str, int len, T_AutoData data, int *errcol)
+t_re_to_auto(T_Auto *aut, const char *str, int len, T_AutoData data, T_ReFlags flags, int *errcol)
 {
 	ReInput inp;
 	T_Result r;
@@ -720,6 +722,7 @@ t_re_to_auto(T_Auto *aut, const char *str, int len, T_AutoData data, int *errcol
 	T_ASSERT(aut && str);
 
 	re_input_init(&inp, str, len);
+	inp.flags = flags;
 
 	if((r = re_parse_full(&inp, aut, data)) < 0){
 		if(errcol){
@@ -732,7 +735,7 @@ t_re_to_auto(T_Auto *aut, const char *str, int len, T_AutoData data, int *errcol
 }
 
 T_Re*
-t_re_create(const char *str, int len, int *errcol)
+t_re_create(const char *str, int len, T_ReFlags flags, int *errcol)
 {
 	T_Auto aut;
 	T_Re *re = NULL;
@@ -741,7 +744,7 @@ t_re_create(const char *str, int len, int *errcol)
 
 	t_auto_init(&aut);
 
-	if(t_re_to_auto(&aut, str, len, 0, errcol) < 0)
+	if(t_re_to_auto(&aut, str, len, 0, flags, errcol) < 0)
 		goto error;
 
 	if(!(re = t_auto_create()))
@@ -775,6 +778,8 @@ re_match(T_Re *re, const char *str, int len, const char **estr, T_Bool bol)
 	T_AutoState *s;
 	T_AutoEdge *e;
 
+	T_DEBUG_I("match \"%s\" len %d", str, len);
+
 	re_input_init(&inp, str, len);
 
 	sid = 0;
@@ -783,12 +788,16 @@ re_match(T_Re *re, const char *str, int len, const char **estr, T_Bool bol)
 next_state:
 		s = &re->states.buff[sid];
 
+		T_DEBUG_I("state: %d", sid);
+
 		if(bol){
 			ch  = T_AUTO_BOL;
 			bol = T_FALSE;
 		}else{
 			ch  = re_getch(&inp);
 		}
+
+		T_DEBUG_I("symbol: %d", ch);
 
 		eid = s->edges;
 		while(eid != -1){
@@ -838,7 +847,7 @@ t_re_match(T_Re *re, const char *str, int len, int *start, int *end)
 			if(start)
 				*start = ptr - str;
 			if(end)
-				*end = estr - str - 1;
+				*end = estr - str;
 			return 1;
 		}
 

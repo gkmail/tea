@@ -33,12 +33,12 @@
 	#define T_HASH_FREE(ptr) free(ptr)
 #endif
 
-#ifndef T_HASH_ELEM_DESTROY
-	#define T_HASH_ELEM_DESTROY(ptr)
+#ifndef T_HASH_ELEM_DEINIT
+	#define T_HASH_ELEM_DEINIT(ptr)
 #endif
 
-#ifndef T_HASH_KEY_DESTROY
-	#define T_HASH_KEY_DESTROY(ptr)
+#ifndef T_HASH_KEY_DEINIT
+	#define T_HASH_KEY_DEINIT(ptr)
 #endif
 
 #ifndef T_HASH_KEY
@@ -46,15 +46,21 @@
 #endif
 
 #ifndef T_HASH_EQUAL
-	#define T_HASH_EQUAL(k1, k2) (*(k1) == *(k2))
+	#ifdef T_HASH_CMP
+		#define T_HASH_EQUAL(k1, k2) (T_HASH_CMP(k1, k2)==0)
+	#else
+		#define T_HASH_EQUAL(k1, k2) (*(k1) == *(k2))
+	#endif
 #endif
 
-static void T_INLINE
+static T_INLINE T_Result
 T_HASH_FUNC(hash_init)(T_HASH_TYPE *hash)
 {
 	hash->T_HASH_NAME.entries = NULL;
 	hash->T_HASH_NAME.nmem   = 0;
 	hash->T_HASH_NAME.bucket = 0;
+
+	return T_OK;
 }
 
 static void
@@ -67,8 +73,8 @@ T_HASH_FUNC(hash_deinit)(T_HASH_TYPE *hash)
 			T_HASH_ENTRY_TYPE *ent, *enext;
 			for(ent = hash->T_HASH_NAME.entries[i]; ent; ent = enext){
 				enext = ent->next;
-				T_HASH_KEY_DESTROY(&ent->key);
-				T_HASH_ELEM_DESTROY(&ent->data);
+				T_HASH_KEY_DEINIT(&ent->key);
+				T_HASH_ELEM_DEINIT(&ent->data);
 				T_HASH_FREE(ent);
 			}
 		}
@@ -79,6 +85,13 @@ T_HASH_FUNC(hash_deinit)(T_HASH_TYPE *hash)
 
 static void
 T_HASH_FUNC(hash_reinit)(T_HASH_TYPE *hash)
+{
+	T_HASH_FUNC(hash_deinit)(hash);
+	T_HASH_FUNC(hash_init)(hash);
+}
+
+static void
+T_HASH_FUNC(hash_clear)(T_HASH_TYPE *hash)
 {
 	T_HASH_FUNC(hash_deinit)(hash);
 	T_HASH_FUNC(hash_init)(hash);
@@ -225,8 +238,8 @@ T_HASH_FUNC(hash_remove)(T_HASH_TYPE *hash, T_HASH_KEY_TYPE *key)
 			else
 				hash->T_HASH_NAME.entries[pos] = ent->next;
 
-			T_HASH_KEY_DESTROY(&ent->key);
-			T_HASH_ELEM_DESTROY(&ent->data);
+			T_HASH_KEY_DEINIT(&ent->key);
+			T_HASH_ELEM_DEINIT(&ent->data);
 			T_HASH_FREE(ent);
 
 			hash->T_HASH_NAME.nmem--;
@@ -312,7 +325,10 @@ T_HASH_FUNC(hash_iter_last)(T_HashIter *iter)
 #undef T_HASH_FUNC
 #undef T_HASH_MALLOC
 #undef T_HASH_FREE
-#undef T_HASH_ELEM_DESTROY
-#undef T_HASH_KEY_DESTROY
+#undef T_HASH_ELEM_DEINIT
+#undef T_HASH_KEY_DEINIT
 #undef T_HASH_KEY
 #undef T_HASH_EQUAL
+#ifdef T_HASH_CMP
+	#undef T_HASH_CMP
+#endif
