@@ -36,8 +36,16 @@
 	#define T_ARRAY_REALLOC T_SET_REALLOC
 #endif
 
+#ifdef T_SET_MALLOC
+	#define T_ARRAY_MALLOC T_SET_MALLOC
+#elif defined(T_SET_REALLOC)
+	#define T_ARRAY_MALLOC(size) T_SET_REALLOC(NULL, size)
+#endif
+
 #ifdef T_SET_FREE
-	#define T_ARRAY_FREE    T_SET_FREE
+	#define T_ARRAY_FREE T_SET_FREE
+#elif defined(T_SET_REALLOC)
+	#define T_ARRAY_FREE(ptr) T_SET_REALLOC(ptr, 0)
 #endif
 
 #ifdef T_SET_ELEM_DEINIT
@@ -86,6 +94,12 @@ static T_INLINE void
 T_SET_FUNC(set_reinit)(T_SET_TYPE *set)
 {
 	T_SET_FUNC(array_reinit)(set);
+}
+
+static T_INLINE T_Result
+T_SET_FUNC(set_dup)(T_SET_TYPE *dst, T_SET_TYPE *src)
+{
+	return T_SET_FUNC(array_dup)(dst, src);
 }
 
 static T_INLINE void
@@ -242,7 +256,16 @@ T_SET_FUNC(set_iter_last)(T_SetIter *iter)
 #undef T_SET_ELEM_TYPE
 #undef T_SET_NAME
 #undef T_SET_FUNC
-#undef T_SET_REALLOC
-#undef T_SET_FREE
-#undef T_SET_ELEM_DEINIT
+#ifdef T_SET_REALLOC
+	#undef T_SET_REALLOC
+#endif
+#ifdef T_SET_MALLOC
+	#undef T_SET_MALLOC
+#endif
+#ifdef T_SET_FREE
+	#undef T_SET_FREE
+#endif
+#ifdef T_SET_ELEM_DEINIT
+	#undef T_SET_ELEM_DEINIT
+#endif
 

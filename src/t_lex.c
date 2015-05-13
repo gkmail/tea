@@ -27,6 +27,8 @@
 #define T_LEX_UNGET_SIZE 16
 #define T_LEX_BUF_SIZE   2048
 
+#define T_LEX_BOL -2
+
 #define T_ARRAY_TYPE        T_LexDecl
 #define T_ARRAY_ELEM_TYPE   T_Auto
 #define T_ARRAY_ELEM_INIT   t_auto_init
@@ -85,7 +87,7 @@ t_lex_decl_build(T_LexDecl *decl)
 		nfa = cond_array_iter_data(&iter);
 		t_auto_init(&dfa);
 
-		if((r = t_auto_to_dfa(nfa, &dfa)) < 0){
+		if((r = t_re_to_dfa(nfa, &dfa)) < 0){
 			t_auto_deinit(&dfa);
 			return r;
 		}
@@ -266,7 +268,7 @@ lex_getch(T_Lex *lex)
 		inp->last_column = inp->column;
 		inp->column = 0;
 		inp->flags &= ~T_LEX_FL_NEW_LINE;
-		return T_AUTO_BOL;
+		return T_LEX_BOL;
 	}
 
 	if(inp->b_count <= 0){
@@ -311,7 +313,7 @@ lex_unget(T_Lex *lex, int ch)
 
 	if(ch == '\n'){
 		inp->flags &= ~T_LEX_FL_NEW_LINE;
-	}else if(ch == T_AUTO_BOL){
+	}else if(ch == T_LEX_BOL){
 		inp->lineno--;
 		inp->column = inp->last_column;
 		inp->flags |= T_LEX_FL_NEW_LINE;
@@ -342,9 +344,12 @@ t_lex_lex(T_Lex *lex, T_LexLoc *loc)
 	T_AutoState *s;
 	T_AutoEdge *e;
 	int sym;
-	T_Bool first = T_TRUE;
+	T_Bool first;
 
 	T_ASSERT(lex);
+
+retry:
+	first = T_TRUE;
 
 	if(!lex->more)
 		text_array_reinit(lex);
@@ -380,11 +385,19 @@ next_state:
 		while(eid != -1){
 			e = &dfa->edges.buff[eid];
 
-			if(e->symbol == sym){
+			if(e->symbol == T_RE_EOL){
+				eol_sid = e->dest;
+			}else if((e->symbol == T_RE_BOL) && (sym == T_LEX_BOL)){
 				sid = e->dest;
 				goto next_state;
-			}else if(e->symbol == T_AUTO_EOL){
-				eol_sid = e->dest;
+			}else{
+				int min = ((unsigned int)e->symbol) & 0xFFFF;
+				int max = ((unsigned int)e->symbol) >> 16;
+
+				if((sym >= min) && (sym <= max)){
+					sid = e->dest;
+					goto next_state;
+				}
 			}
 
 			eid = e->next;
@@ -424,6 +437,9 @@ next_state:
 	}
 
 	lex->more = T_FALSE;
+
+	if(tok == 0)
+		goto retry;
 
 	return tok;
 }

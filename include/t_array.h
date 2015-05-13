@@ -29,8 +29,20 @@
 	#define T_ARRAY_REALLOC(ptr, size) realloc(ptr, size)
 #endif
 
+#ifndef T_ARRAY_MALLOC
+	#ifdef T_ARRAY_REALLOC
+		#define T_ARRAY_MALLOC(size) T_ARRAY_REALLOC(NULL, size) 
+	#else
+		#define T_ARRAY_MALLOC(size) malloc(size)
+	#endif
+#endif
+
 #ifndef T_ARRAY_FREE
-	#define T_ARRAY_FREE(ptr) free(ptr)
+	#ifdef T_ARRAY_REALLOC
+		#define T_ARRAY_FREE(ptr) T_ARRAY_REALLOC(ptr, 0) 
+	#else
+		#define T_ARRAY_FREE(ptr) free(ptr)
+	#endif
 #endif
 
 #ifndef T_ARRAY_EQUAL
@@ -157,6 +169,21 @@ T_ARRAY_FUNC(array_clear)(T_ARRAY_TYPE *array)
 	T_ARRAY_FUNC(array_init)(array);
 }
 
+static T_Result
+T_ARRAY_FUNC(array_dup)(T_ARRAY_TYPE *dst, T_ARRAY_TYPE *src)
+{
+	T_ASSERT(dst && src);
+
+	dst->T_ARRAY_NAME.nmem = src->T_ARRAY_NAME.nmem;
+	dst->T_ARRAY_NAME.size = src->T_ARRAY_NAME.nmem;
+	dst->T_ARRAY_NAME.buff = (T_ARRAY_ELEM_TYPE*)T_ARRAY_MALLOC(dst->T_ARRAY_NAME.size * sizeof(T_ARRAY_ELEM_TYPE));
+	if(!dst->T_ARRAY_NAME.buff)
+		return T_ERR_NOMEM;
+
+	memcpy(dst->T_ARRAY_NAME.buff, src->T_ARRAY_NAME.buff, dst->T_ARRAY_NAME.nmem * sizeof(T_ARRAY_ELEM_TYPE));
+	return T_OK;
+}
+
 static T_INLINE T_ARRAY_ELEM_TYPE*
 T_ARRAY_FUNC(array_element)(T_ARRAY_TYPE *array, T_ID index)
 {
@@ -197,6 +224,37 @@ T_ARRAY_FUNC(array_element_resize)(T_ARRAY_TYPE *array, T_ID index)
 	return &array->T_ARRAY_NAME.buff[index];
 }
 
+static T_Result
+T_ARRAY_FUNC(array_insert)(T_ARRAY_TYPE *array, T_ID pos, T_ARRAY_ELEM_TYPE *v)
+{
+	T_ARRAY_ELEM_TYPE *elem;
+	int len, left;
+
+	T_ASSERT(array && v && (pos >= 0));
+
+	len = T_ARRAY_FUNC(array_length)(array);
+
+	if(pos < len){
+		elem = T_ARRAY_FUNC(array_element_resize)(array, len);
+		if(!elem)
+			return T_ERR_NOMEM;
+
+		left = len - pos;
+		if(left > 0)
+			memmove(array->T_ARRAY_NAME.buff + pos + 1, array->T_ARRAY_NAME.buff + pos, left * sizeof(T_ARRAY_ELEM_TYPE));
+
+		array->T_ARRAY_NAME.buff[pos] = *v;
+	}else{
+		elem = T_ARRAY_FUNC(array_element_resize)(array, pos);
+		if(!elem)
+			return T_ERR_NOMEM;
+
+		*elem = *v;
+	}
+
+	return T_OK;
+}
+
 #ifdef T_ARRAY_EQUAL
 static T_ID
 T_ARRAY_FUNC(array_find)(T_ARRAY_TYPE *array, T_ARRAY_ELEM_TYPE *v)
@@ -216,6 +274,7 @@ T_ARRAY_FUNC(array_find)(T_ARRAY_TYPE *array, T_ARRAY_ELEM_TYPE *v)
 static T_Result
 T_ARRAY_FUNC(array_add_unique)(T_ARRAY_TYPE *array, T_ARRAY_ELEM_TYPE *v, T_ID *rid)
 {
+	T_Result r;
 	T_ID id;
 
 	T_ASSERT(array && v);
@@ -223,11 +282,15 @@ T_ARRAY_FUNC(array_add_unique)(T_ARRAY_TYPE *array, T_ARRAY_ELEM_TYPE *v, T_ID *
 	if ((id = T_ARRAY_FUNC(array_find)(array, v)) < 0){
 		if((id = T_ARRAY_FUNC(array_add)(array, v)) < 0)
 			return id;
+
+		r = 1;
+	}else{
+		r = 0;
 	}
 
 	if(rid)
 		*rid = id;
-	return T_OK;
+	return r;
 }
 
 #endif /*T_ARRAY_EQUAL*/
@@ -289,6 +352,7 @@ T_ARRAY_FUNC(array_iter_last)(T_ArrayIter *iter)
 #undef T_ARRAY_NAME
 #undef T_ARRAY_FUNC
 #undef T_ARRAY_REALLOC
+#undef T_ARRAY_MALLOC
 #undef T_ARRAY_FREE
 #undef T_ARRAY_ELEM_INIT
 #undef T_ARRAY_ELEM_DEINIT

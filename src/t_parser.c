@@ -26,6 +26,13 @@
 
 #define T_PARSER_RULE_SIZE  64
 
+#define T_PARSER_RDATA_NT_FLAG       0x80000000
+#define T_PARSER_RDATA_IS_NT(v)      ((v) & T_PARSER_RDATA_NT_FLAG)
+#define T_PARSER_RDATA_RID(v)        ((v) & 0xFFF)
+#define T_PARSER_RDATA_TID(v)        (((v) >> 12) & 0xFFF)
+#define T_PARSER_RDATA_POP(v)        (((v) >> 24) & 0x7F)
+#define T_PARSER_RDATA_MAKE(rid, nt, pop) ((((unsigned int)(pop))<<24)|(((unsigned int)(nt))<<12)|(rid))
+
 #define T_ARRAY_TYPE        T_ParserExpr
 #define T_ARRAY_ELEM_TYPE   T_ParserToken
 #define T_ARRAY_NAME        tokens
@@ -48,20 +55,74 @@
 #define T_ARRAY_FUNC(name)  rule_##name
 #include <t_array.h>
 
+#define T_ARRAY_TYPE        T_ParserDecl
+#define T_ARRAY_ELEM_TYPE   T_ParserState
+#define T_ARRAY_NAME        states
+#define T_ARRAY_FUNC(name)  state_##name
+#include <t_array.h>
+
+#define T_ARRAY_TYPE        T_ParserDecl
+#define T_ARRAY_ELEM_TYPE   T_ParserEdge
+#define T_ARRAY_NAME        edges
+#define T_ARRAY_FUNC(name)  edge_##name
+#include <t_array.h>
+
+static T_ID
+decl_add_state(T_ParserDecl *decl)
+{
+	T_ParserState s;
+
+	s.shifts = -1;
+	s.jumps  = -1;
+	s.reduce = -1;
+
+	return state_array_add(decl, &s);
+}
+
+static T_ID
+decl_add_shift(T_ParserDecl *decl, T_ID from, T_ID to, int symbol)
+{
+	T_ParserEdge e;
+	T_ID eid;
+
+	e.symbol = symbol;
+	e.dest   = to;
+	e.next   = state_array_element(decl, from)->shifts;
+
+	if((eid = edge_array_add(decl, &e)) < 0)
+		return eid;
+
+	state_array_element(decl, from)->shifts = eid;
+
+	return eid;
+}
+
+static T_ID
+decl_add_jump(T_ParserDecl *decl, T_ID from, T_ID to, int symbol)
+{
+	T_ParserEdge e;
+	T_ID eid;
+
+	e.symbol = symbol;
+	e.dest   = to;
+	e.next   = state_array_element(decl, from)->jumps;
+
+	if((eid = edge_array_add(decl, &e)) < 0)
+		return eid;
+
+	state_array_element(decl, from)->jumps = eid;
+
+	return eid;
+}
+
 T_Result
 t_parser_decl_init(T_ParserDecl *decl)
 {
-	T_Result r;
-
 	T_ASSERT(decl);
 
-	if((r = rule_array_init(decl)) < 0)
-		return r;
-
-	if((r = t_auto_init(&decl->dfa)) < 0){
-		rule_array_deinit(decl);
-		return r;
-	}
+	rule_array_init(decl);
+	state_array_init(decl);
+	edge_array_init(decl);
 
 	return T_OK;
 }
@@ -69,8 +130,9 @@ t_parser_decl_init(T_ParserDecl *decl)
 void
 t_parser_decl_deinit(T_ParserDecl *decl)
 {
+	edge_array_deinit(decl);
+	state_array_deinit(decl);
 	rule_array_deinit(decl);
-	t_auto_deinit(&decl->dfa);
 }
 
 #define T_ALLOC_TYPE   T_ParserDecl
@@ -109,6 +171,7 @@ t_parser_decl_add_rulev(T_ParserDecl *decl, T_ParserNonterm nonterm, int *tokens
 	T_ParserToken tok;
 	T_ParserExpr expr;
 	T_ID rid;
+	T_Bool reduce;
 	int i;
 	T_Result r;
 
@@ -122,34 +185,48 @@ t_parser_decl_add_rulev(T_ParserDecl *decl, T_ParserNonterm nonterm, int *tokens
 		return T_ERR_NOMEM;
 
 	token_array_init(&expr);
-	expr.prio = T_PARSER_PRIO_MIN;
+	expr.prio   = -1;
 
+	reduce = T_FALSE;
 	for(i = 0; i < len; i++){
 		int tid = tokens[i];
 
-		if(T_PARSER_IS_TERM(tid)){
-			tok.token = tid;
-
-			if((i + 1 < len) && T_PARSER_IS_REDUCE(tokens[i + 1])){
-				i++;
-				tok.reduce = tokens[i];
-			}else{
-				tok.reduce = -1;
+		if(T_PARSER_IS_REDUCE(tid)){
+			if(reduce){
+				T_DEBUG_E("duplicate reduce actions");
+				return T_ERR_SYNTAX;
 			}
 
+			tok = tid;
 			if((r = token_array_add(&expr, &tok)) < 0)
 				goto error;
-		}else if(T_PARSER_IS_NONTERM(tid)){
-			tok.token  = tid;
-			tok.reduce = -1;
 
+			reduce = T_TRUE;
+		}else if(T_PARSER_IS_TERM(tid)){
+			tok = tid;
 			if((r = token_array_add(&expr, &tok)) < 0)
 				goto error;
+
+			reduce = T_FALSE;
+		}else if(T_PARSER_IS_NONTERM(tid)){
+			tok = tid;
+			if((r = token_array_add(&expr, &tok)) < 0)
+				goto error;
+
+			reduce = T_FALSE;
 		}else if(T_PARSER_IS_PRIO(tid)){
 			expr.prio = tid;
 		}else{
 			r = T_ERR_SYNTAX;
 		}
+	}
+
+	if(!reduce){
+		T_DEBUG_W("reduce action has not been defined");
+
+		tok = T_PARSER_REDUCE_NONE;
+		if((r = token_array_add(&expr, &tok)) < 0)
+			goto error;
 	}
 
 	if((r = expr_array_add(rule, &expr)) < 0)
@@ -162,412 +239,539 @@ error:
 }
 
 typedef struct{
-	int  rule_id;
-	int  expr_id;
-	int  dot;
-	int  reduce_sid;
+	int rule_id;
+	int expr_id;
+	int dot;
 }Prod;
 
 typedef struct{
-	T_ARRAY_DECL(Prod, a);
-	T_ID dfa_sid;
+	T_SET_DECL(Prod, prods);
+	int sid;
 }Closure;
-#define T_ARRAY_TYPE       Closure
-#define T_ARRAY_ELEM_TYPE  Prod
-#define T_ARRAY_NAME       a
-#define T_ARRAY_CMP(p1, p2) memcmp(p1, p2, sizeof(Prod))
-#define T_ARRAY_FUNC(name) prod_##name
-#include <t_array.h>
+
+#define T_SET_TYPE        Closure
+#define T_SET_ELEM_TYPE   Prod
+#define T_SET_NAME        prods
+#define T_SET_CMP(p1, p2) memcmp(p1, p2, sizeof(Prod))
+#define T_SET_FUNC(name)  prod_##name
+#include <t_set.h>
+
+static T_Bool
+clos_equal(Closure *c1, Closure *c2)
+{
+	if(prod_array_length(c1) != prod_array_length(c2))
+		return T_FALSE;
+
+	if(memcmp(c1->prods.buff, c2->prods.buff, sizeof(Prod) * prod_array_length(c1)))
+		return T_FALSE;
+
+	return T_TRUE;
+}
 
 typedef struct{
 	T_ARRAY_DECL(Closure, a);
 }ClosArray;
-#define T_ARRAY_TYPE        ClosArray
-#define T_ARRAY_ELEM_TYPE   Closure
-#define T_ARRAY_NAME        a
+
+#define T_ARRAY_TYPE       ClosArray
+#define T_ARRAY_ELEM_TYPE  Closure
+#define T_ARRAY_NAME       a
+#define T_ARRAY_EQUAL      clos_equal
 #define T_ARRAY_ELEM_DEINIT prod_array_deinit
-#define T_ARRAY_FUNC(name)  clos_##name
+#define T_ARRAY_FUNC(name) clos_##name
 #include <t_array.h>
 
 typedef struct{
-	T_QUEUE_DECL(T_ID, q);
-}CIDQueue;
-#define T_QUEUE_TYPE        CIDQueue
-#define T_QUEUE_ELEM_TYPE   T_ID
-#define T_QUEUE_NAME        q
-#define T_QUEUE_FUNC(name)  cid_##name
+	T_QUEUE_DECL(Prod, q);
+}ProdQueue;
+
+#define T_QUEUE_TYPE      ProdQueue
+#define T_QUEUE_ELEM_TYPE Prod
+#define T_QUEUE_NAME      q
+#define T_QUEUE_FUNC(name) prod_##name
 #include <t_queue.h>
 
-typedef struct{
-	T_ID cid;
-	struct{
-		Prod prod;
-		int  prio;
-		int  dfa_sid;
-	}shift;
-	struct{
-		Prod prod;
-		int  prio;
-		int  dfa_sid;
-	}reduce;
-}Action;
+T_HASH_ENTRY_DECL(int, Closure, SymClosHashEntry);
 
-T_HASH_ENTRY_DECL(int, Action, ActHashEntry);
 typedef struct{
-	T_HASH_DECL(ActHashEntry, h);
-}ActHash;
+	T_HASH_DECL(SymClosHashEntry, h);
+}SymClosHash;
 
-#define T_HASH_TYPE       ActHash
-#define T_HASH_ENTRY_TYPE ActHashEntry
+#define T_HASH_TYPE       SymClosHash
+#define T_HASH_ENTRY_TYPE SymClosHashEntry
 #define T_HASH_KEY_TYPE   int
-#define T_HASH_ELEM_TYPE  Action
+#define T_HASH_ELEM_TYPE  Closure
 #define T_HASH_NAME       h
-#define T_HASH_FUNC(name) act_##name
+#define T_HASH_ELEM_DEINIT prod_array_deinit
+#define T_HASH_FUNC(name) sym_clos_##name
 #include <t_hash.h>
 
 static T_Result
-clos_add_rule(T_ParserDecl *decl, Closure *clos, T_ParserNonterm nt, T_ID reduce_sid)
+add_rule_prods(T_ParserDecl *decl, Closure *prods, int id, ProdQueue *q, T_Bool *has_eps)
 {
-	T_ID tid = T_PARSER_NONTERM_ID(nt);
-	T_ParserRule *rule = rule_array_element(decl, tid);
+	T_ParserRule *rule = rule_array_element(decl, id);
+	T_ParserExpr *expr;
+	T_ArrayIter iter;
 	Prod prod;
-	T_ID eid;
+	T_Bool eps = T_FALSE;
 	T_Result r;
 
-	prod.rule_id    = tid;
-	prod.dot        = 0;
-	prod.reduce_sid = reduce_sid;
+	prod.rule_id = id;
+	prod.expr_id = 0;
+	prod.dot = 0;
 
-	for(eid = 0; eid < rule->exprs.nmem; eid++){
-		prod.expr_id = eid;
+	expr_array_iter_first(rule, &iter);
+	while(!expr_array_iter_last(&iter)){
+		int len;
 
-		T_DEBUG_I("add prod rule:%d expr:%d dot:%d reduce_sid:%d to closure %d",
-					prod.rule_id, prod.expr_id, prod.dot, prod.reduce_sid,
-					clos->dfa_sid);
+		expr = expr_array_iter_data(&iter);
 
-		if((r = prod_array_add_unique(clos, &prod, NULL)) < 0)
+		if((r = prod_set_add(prods, &prod, NULL)) < 0)
 			return r;
+
+		if(r > 0){
+			T_DEBUG_I("add prod rule:%d expr:%d dot:%d", prod.rule_id, prod.expr_id, prod.dot);
+			if((r = prod_queue_push_back(q, &prod)) < 0)
+				return r;
+		}
+
+		len = token_array_length(expr);
+		if(len == 1)
+			eps = T_TRUE;
+
+		expr_array_iter_next(&iter);
+		prod.expr_id++;
 	}
+
+	if(has_eps)
+		*has_eps = eps;
 
 	return T_OK;
 }
 
 static T_Result
-solve_shift_reduce(T_ParserDecl *decl, Action *act, CIDQueue *q, ClosArray *c_array)
+add_clos_prods(T_ParserDecl *decl, Closure *prods, Closure *clos, ProdQueue *q)
 {
-	int s_prio = T_PARSER_PRIO_VALUE(act->shift.prio);
-	int r_prio = T_PARSER_PRIO_VALUE(act->reduce.prio);
-	int s_dir  = T_PARSER_PRIO_DIR(act->shift.prio);
-	int r_dir  = T_PARSER_PRIO_DIR(act->reduce.prio);
-	T_Bool reduce = T_TRUE;
-	T_Result r;
-
-	if(r_prio < s_prio){
-		reduce = T_FALSE;
-	}else if(r_prio == s_prio){
-		if((r_dir == T_PARSER_PRIO_RIGHT) && (s_dir == T_PARSER_PRIO_RIGHT))
-			reduce = T_FALSE;
-	}
-
-	T_DEBUG_I("solve shift/reduce conflict");
-
-	if(!reduce){
-		Prod prod = act->shift.prod;
-		Closure clos, *pclos;
-		T_ID cid;
-
-		if((clos.dfa_sid = t_auto_add_state(&decl->dfa, -1)) < 0){
-			r = clos.dfa_sid;
-			return r;
-		}
-
-		act->shift.dfa_sid = clos.dfa_sid;
-
-		T_DEBUG_I("create closure %d", clos.dfa_sid);
-
-		prod_array_init(&clos);
-
-		if((cid = clos_array_add(c_array, &clos)) < 0){
-			r = cid;
-			return r;
-		}
-
-		prod_array_deinit(&clos);
-
-		T_DEBUG_I("push closure %d", cid);
-		if((r = cid_queue_push_back(q, &cid)) < 0)
-			return r;
-
-		prod.reduce_sid = act->reduce.dfa_sid;
-
-		pclos = clos_array_element(c_array, cid);
-		if((r = prod_array_add_unique(pclos, &prod, NULL)) < 0)
-			return r;
-
-		T_DEBUG_I("add prod rule:%d expr:%d dot:%d reduce_sid:%d to closure %d",
-					prod.rule_id, prod.expr_id, prod.dot, prod.reduce_sid,
-					act->shift.dfa_sid);
-
-		act->reduce.dfa_sid = -1;
-	}else{
-		act->shift.dfa_sid = -1;
-	}
-
-	return T_OK;
-}
-
-static T_Result
-clos_build(T_ParserDecl *decl, T_ID cid, CIDQueue *q, ClosArray *c_array)
-{
-	ActHash act_hash;
-	ActHashEntry *act_hent;
-	Action *act;
-	Closure *clos;
+	T_SetIter iter;
 	T_ParserRule *rule;
 	T_ParserExpr *expr;
-	T_ParserToken *tok;
-	T_HashIter iter;
-	T_ID pid;
+	Prod *prod;
 	T_Result r;
 
-	act_hash_init(&act_hash);
+	prod_set_iter_first(clos, &iter);
+	while(!prod_set_iter_last(&iter)){
+		prod = prod_set_iter_data(&iter);
+		rule = rule_array_element(decl, prod->rule_id);
+		expr = expr_array_element(rule, prod->expr_id);
 
-	clos = clos_array_element(c_array, cid);
-	T_DEBUG_I("build closure %d", clos->dfa_sid);
+		if((r = prod_set_add(prods, prod, NULL)) < 0)
+			return r;
 
-	for(pid = 0; pid < prod_array_length(clos); pid++){
-		Prod prod = *prod_array_element(clos, pid);
-		T_Bool reduce;
-		Closure *next_clos;
-		T_AutoState *state;
+		if(r > 0){
+			T_DEBUG_I("add prod rule:%d expr:%d dot:%d", prod->rule_id, prod->expr_id, prod->dot);
+			if((r = prod_queue_push_back(q, prod)) < 0)
+				return r;
+		}
+
+		prod_set_iter_next(&iter);
+	}
+
+	return T_OK;
+}
+
+static void
+prod_dump(T_ParserDecl *decl, Prod *p)
+{
+	T_ParserRule *rule;
+	T_ParserExpr *expr;
+	int tid;
+
+	rule = rule_array_element(decl, p->rule_id);
+	expr = expr_array_element(rule, p->expr_id);
+
+	fprintf(stderr, "%08x: ", T_PARSER_NONTERM(p->rule_id));
+
+	for(tid = 0; tid < token_array_length(expr); tid++){
+		T_ParserToken tok = *token_array_element(expr, tid);
+
+		if(tid == p->dot)
+			fprintf(stderr, ". ");
+
+		fprintf(stderr, "%08x ", tok);
+	}
+
+	fprintf(stderr, "\n");
+}
+
+static int
+prio_check(T_ParserDecl *decl, Prod *p1, Prod *p2)
+{
+	T_ParserRule *r1, *r2;
+	T_ParserExpr *e1, *e2;
+	int v1, v2, d1, d2;
+
+	r1 = rule_array_element(decl, p1->rule_id);
+	r2 = rule_array_element(decl, p2->rule_id);
+	e1 = expr_array_element(r1, p1->expr_id);
+	e2 = expr_array_element(r2, p2->expr_id);
+
+	if(e2->prio == -1)
+		return 1;
+	if(e1->prio == -1)
+		return -1;
+
+	v1 = T_PARSER_PRIO_VALUE(e1->prio);
+	v2 = T_PARSER_PRIO_VALUE(e2->prio);
+	d1 = T_PARSER_PRIO_DIR(e1->prio);
+	d2 = T_PARSER_PRIO_DIR(e2->prio);
+
+	if(v1 != v2)
+		return v1 - v2;
+
+	if((d1 == T_PARSER_PRIO_RIGHT) && (d2 == T_PARSER_PRIO_RIGHT))
+		return -1;
+
+	return 1;
+}
+
+static T_Result
+clos_build(T_ParserDecl *decl, T_ID clos_id, ClosArray *c_array)
+{
+	T_ParserRule *rule;
+	T_ParserExpr *expr;
+	T_ParserToken tok;
+	SymClosHash c_hash;
+	ProdQueue p_queue;
+	Closure prods, *clos;
+	T_SetIter s_iter;
+	T_HashIter h_iter;
+	T_Result r;
+	T_ParserReduce r_tok;
+	Prod r_prod;
+
+	clos = clos_array_element(c_array, clos_id);
+
+	T_DEBUG_I("build closure %d", clos->sid);
+
+	r_tok = -1;
+	r_prod.rule_id = -1;
+
+	sym_clos_hash_init(&c_hash);
+	prod_queue_init(&p_queue);
+	prod_set_init(&prods);
+
+	/*Collect productions.*/
+	T_DEBUG_I("init prod data");
+
+	if((r = add_clos_prods(decl, &prods, clos, &p_queue)) < 0)
+		goto end;
+
+	T_DEBUG_I("analyze prod queue");
+	while(!prod_queue_empty(&p_queue)){
+		Prod prod;
+		int dot;
+
+		prod_queue_pop_front(&p_queue, &prod);
+
+		T_DEBUG_I("check prod rule:%d expr:%d dot:%d", prod.rule_id, prod.expr_id, prod.dot);
 
 		rule = rule_array_element(decl, prod.rule_id);
 		expr = expr_array_element(rule, prod.expr_id);
+		dot  = prod.dot;
 
-		reduce = (prod.dot + 1 == expr->tokens.nmem);
+		while(dot < token_array_length(expr)){
+			tok = *token_array_element(expr, dot);
 
-		assert(prod.dot < expr->tokens.nmem);
+			if(T_PARSER_IS_NONTERM(tok)){
+				int tid = T_PARSER_NONTERM_ID(tok);
+				T_Bool has_eps;
 
-		tok = token_array_element(expr, prod.dot);
-
-		T_DEBUG_I("check prod rule:%d expr:%d dot:%d reduce_sid:%d symbol:%d",
-					prod.rule_id, prod.expr_id, prod.dot, prod.reduce_sid, tok->token);
-
-		if((r = act_hash_add_entry(&act_hash, &tok->token, &act_hent)) < 0)
-			goto end;
-
-		act = &act_hent->data;
-		if(r > 0){
-			act->cid = -1;
-			act->shift.dfa_sid  = -1;
-			act->reduce.dfa_sid = -1;
-		}
-
-		if(T_PARSER_NONTERM_ID(tok->token) == prod.rule_id){
-			next_clos = clos_array_element(c_array, prod.reduce_sid);
-		}else{
-			if(act->cid >= 0){
-				/*Get the closure.*/
-				next_clos = clos_array_element(c_array, act->cid);
-			}else{
-				/*Add a new closure.*/
-				Closure next_c;
-
-				if((next_c.dfa_sid = t_auto_add_state(&decl->dfa, -1)) < 0){
-					r = next_c.dfa_sid;
-					goto end;
-				}
-
-				T_DEBUG_I("create closure %d", next_c.dfa_sid);
-
-				prod_array_init(&next_c);
-
-				if((act->cid = clos_array_add(c_array, &next_c)) < 0){
-					r = act->cid;
-					goto end;
-				}
-
-				prod_array_deinit(&next_c);
-
-				T_DEBUG_I("push closure %d", act->cid);
-				if((r = cid_queue_push_back(q, &act->cid)) < 0)
+				if((r = add_rule_prods(decl, &prods, tid, &p_queue, &has_eps)) < 0)
 					goto end;
 
-				next_clos = clos_array_element(c_array, act->cid);
-				clos   = clos_array_element(c_array, cid);
-			}
-		}
-
-		/*Test reduce/reduce conflict.*/
-		state = &decl->dfa.states.buff[next_clos->dfa_sid];
-		if((state->data != -1) && (tok->reduce != -1)){
-			T_DEBUG_W("reduce/reduce conflict");
-		}else if(tok->reduce != -1){
-			state->data = tok->reduce;
-		}
-
-		/*Add the shift production to the next closure.*/
-		if(!reduce){
-			Prod next_prod;
-
-			next_prod.rule_id    = prod.rule_id;
-			next_prod.expr_id    = prod.expr_id;
-			next_prod.dot        = prod.dot + 1;
-			next_prod.reduce_sid = prod.reduce_sid;
-
-			if((r = prod_array_add_unique(next_clos, &next_prod, NULL)) < 0)
-				goto end;
-
-			T_DEBUG_I("add prod rule:%d expr:%d dot:%d reduce_sid:%d to closure %d",
-						next_prod.rule_id, next_prod.expr_id, next_prod.dot, next_prod.reduce_sid,
-						next_clos->dfa_sid);
-		}
-
-
-		if(T_PARSER_IS_NONTERM(tok->token)){
-			/*Solve the non terminated token.*/
-			T_Bool recursive = T_FALSE;
-
-			/*Recursive check.*/
-			if(prod.dot == 0){
-				if(T_PARSER_NONTERM_ID(tok->token) == prod.rule_id){
-					recursive = T_TRUE;
+				if(has_eps){
+					dot++;
+					continue;
 				}
 			}
 
-			if(!recursive){
-				/*Add non terminated toke rules to closure.*/
-				if((r = clos_add_rule(decl, clos, tok->token, next_clos->dfa_sid)) < 0)
-					goto end;
-			}
-		}else{
-			/*Solve terminated token.*/
-			if(reduce && (act->reduce.dfa_sid != -1)){
-				T_DEBUG_I("reduce/reduce conflict");
-			}else if(!reduce && (act->shift.dfa_sid != -1) && (act->shift.dfa_sid != next_clos->dfa_sid)){
-				T_DEBUG_I("shift/shift conflict");
-			}else if(reduce){
-				/*Reduce.*/
-				act->reduce.prio    = expr->prio;
-				act->reduce.prod    = prod;
-				act->reduce.dfa_sid = next_clos->dfa_sid;
-
-				if(act->shift.dfa_sid != -1){
-					if((r = solve_shift_reduce(decl, act, q, c_array)) < 0)
-						goto end;
-				}
-			}else{
-				/*Shift.*/
-				act->shift.prio    = expr->prio;
-				act->shift.prod    = prod;
-				act->shift.dfa_sid = next_clos->dfa_sid;
-
-				if(act->reduce.dfa_sid != -1){
-					if((r = solve_shift_reduce(decl, act, q, c_array)) < 0)
-						goto end;
-				}
-			}
+			break;
 		}
 	}
 
-	/*Add links.*/
-	act_hash_iter_first(&act_hash, &iter);
-	while(!act_hash_iter_last(&iter)){
+	/*Analyze the next input tokens*/
+	T_DEBUG_I("check next input tokens");
+	prod_set_iter_first(&prods, &s_iter);
+	while(!prod_set_iter_last(&s_iter)){
+		Prod *prod = prod_set_iter_data(&s_iter);
+		rule = rule_array_element(decl, prod->rule_id);
+		expr = expr_array_element(rule, prod->expr_id);
 
-		int symbol = *act_hash_iter_key(&iter);
-		Action *act = act_hash_iter_data(&iter);
+		if(prod->dot < token_array_length(expr)){
+			Prod nprod;
+			SymClosHashEntry *hent;
+			Closure *nclos;
 
-		if(act->shift.dfa_sid != -1){
-			T_DEBUG_I("add shift edge from:%d to:%d symbol:%d", clos->dfa_sid, act->shift.dfa_sid, symbol);
-			if((r = t_auto_add_edge(&decl->dfa, clos->dfa_sid, act->shift.dfa_sid, symbol)) < 0)
-				goto end;
-		}else if(act->reduce.dfa_sid != -1){
-			T_DEBUG_I("add shift edge from:%d to:%d symbol:%d", clos->dfa_sid, act->reduce.dfa_sid, symbol);
-			if((r = t_auto_add_edge(&decl->dfa, clos->dfa_sid, act->reduce.dfa_sid, symbol)) < 0)
-				goto end;
-			T_DEBUG_I("add reduce edge from:%d to:%d symbol:%d", act->reduce.dfa_sid, act->reduce.prod.reduce_sid, T_AUTO_REDUCE);
-			if((r = t_auto_add_edge(&decl->dfa, act->reduce.dfa_sid, act->reduce.prod.reduce_sid, T_AUTO_REDUCE)) < 0)
-				goto end;
+			tok = *token_array_element(expr, prod->dot);
+
+			if(prod->dot + 1 < token_array_length(expr)){
+				/*Add the next production.*/
+				nprod.rule_id = prod->rule_id;
+				nprod.expr_id = prod->expr_id;
+				nprod.dot     = prod->dot + 1;
+
+				T_DEBUG_I("symbol:%08x -> prod rule:%d expr:%d dot:%d", tok, nprod.rule_id, nprod.expr_id, nprod.dot);
+
+				if((r = sym_clos_hash_add_entry(&c_hash, &tok, &hent)) < 0)
+					goto end;
+
+				nclos = &hent->data;
+
+				if(r > 0){
+					prod_set_init(nclos);
+					nclos->sid = 0;
+				}
+
+				if((r = prod_set_add(nclos, &nprod, NULL)) < 0)
+					goto end;
+			}
+
+			if(T_PARSER_IS_REDUCE(tok)){
+				/*Reduce*/
+				if(r_prod.rule_id != -1){
+					T_DEBUG_W("reduce/reduce conflict");
+					prod_dump(decl, &r_prod);
+					prod_dump(decl, prod);
+				}else{
+					r_prod = *prod;
+					r_tok  = tok;
+				}
+			}
 		}
 
-		act_hash_iter_next(&iter);
+		prod_set_iter_next(&s_iter);
+	}
+
+	/*Solve shift/reduce conflict.*/
+	T_DEBUG_I("solve shift/reduce conflict ");
+
+	if(r_prod.rule_id != -1){
+		T_ParserState *s = state_array_element(decl, clos->sid);
+		T_ParserRule *rule = rule_array_element(decl, r_prod.rule_id);
+		T_ParserExpr *expr = expr_array_element(rule, r_prod.expr_id);
+		T_ParserToken tok = *token_array_element(expr, r_prod.dot);
+		int reduce, pop, ntid, rid, flag;
+
+		sym_clos_hash_iter_first(&c_hash, &h_iter);
+		while(!sym_clos_hash_iter_last(&h_iter)){
+			int sym = *sym_clos_hash_iter_key(&h_iter);
+			Closure *pclos = sym_clos_hash_iter_data(&h_iter);
+
+			if(T_PARSER_IS_REDUCE(sym) && (r_tok != sym)){
+				pclos->sid = -1;
+			}else if(T_PARSER_IS_TERM(sym)){
+				Prod *sprod = prod_set_element(pclos, 0);
+
+				if(prio_check(decl, &r_prod, sprod) > 0){
+					pclos->sid = -1;
+				}
+			}
+
+			sym_clos_hash_iter_next(&h_iter);
+		}
+
+		if(r_prod.dot == token_array_length(expr) - 1){
+			rid  = T_PARSER_REDUCE_ID(tok);
+			ntid = r_prod.rule_id;
+			pop  = r_prod.dot;
+			flag = T_PARSER_RDATA_NT_FLAG;
+		}else{
+			rid  = T_PARSER_REDUCE_ID(tok);
+			ntid = 0;
+			pop  = r_prod.dot;
+			flag = 0;
+		}
+
+		reduce = T_PARSER_RDATA_MAKE(rid, ntid, pop) | flag;
+
+		T_DEBUG_I("reduce %08x", reduce);
+		s->reduce = reduce;
+	}
+
+	/*Create DFA states and edges.*/
+	sym_clos_hash_iter_first(&c_hash, &h_iter);
+	while(!sym_clos_hash_iter_last(&h_iter)){
+		int sym = *sym_clos_hash_iter_key(&h_iter);
+		Closure *pclos = sym_clos_hash_iter_data(&h_iter);
+		T_ID cid, eid;
+
+		if(pclos->sid != -1){
+			if((r = clos_array_add_unique(c_array, pclos, &cid)) < 0)
+				goto end;
+
+			if(r > 0)
+				prod_set_init(pclos);
+
+			clos  = clos_array_element(c_array, clos_id);
+			pclos = clos_array_element(c_array, cid);
+			if(r > 0){
+				pclos->sid = decl_add_state(decl);
+				if(pclos->sid < 0){
+					r = pclos->sid;
+					goto end;
+				}
+
+				T_DEBUG_I("create state: %d", pclos->sid);
+			}
+
+			if(T_PARSER_IS_TERM(sym)){
+				T_DEBUG_I("shift %d -> %08x -> %d", clos->sid, sym, pclos->sid);
+				eid = decl_add_shift(decl, clos->sid, pclos->sid, sym);
+				if(eid < 0){
+					r = eid;
+					goto end;
+				}
+			}else if(T_PARSER_IS_NONTERM(sym) || T_PARSER_IS_REDUCE(sym)){
+				T_DEBUG_I("goto %d -> %08x -> %d", clos->sid, sym, pclos->sid);
+				eid = decl_add_jump(decl, clos->sid, pclos->sid, sym);
+				if(eid < 0){
+					r = eid;
+					goto end;
+				}
+			}
+		}
+
+		sym_clos_hash_iter_next(&h_iter);
 	}
 
 	r = T_OK;
 end:
-	act_hash_deinit(&act_hash);
+	prod_set_deinit(&prods);
+	sym_clos_hash_deinit(&c_hash);
+	prod_queue_deinit(&p_queue);
 	return r;
 }
 
 T_Result
 t_parser_decl_build(T_ParserDecl *decl)
 {
-	ClosArray c_array;
-	CIDQueue c_queue;
-	T_ID cid;
 	Closure clos;
-	T_ID sid;
+	ClosArray c_array;
 	T_Result r;
+	Prod prod;
+	T_ID id, rid;
 
-	if(rule_array_length(decl) <= 0)
-		return T_ERR_NOTINIT;
+	T_ASSERT(decl);
 
-	if(decl->dfa.states.nmem != 1)
+	if(state_array_length(decl) > 0)
 		return T_ERR_REINIT;
 
-	T_DEBUG_I("build DFA, rules:%d", rule_array_length(decl));
+	/*Add S rule.*/
+	rid = rule_array_length(decl);
+	if((r = t_parser_decl_add_rule(decl, T_PARSER_NONTERM(rid), T_PARSER_NONTERM(0), -1)) < 0)
+		return r;
 
+	T_DEBUG_I("parser decl build, rules:%d", rule_array_length(decl));
+
+	prod_set_init(&clos);
 	clos_array_init(&c_array);
-	cid_queue_init(&c_queue);
-	prod_array_init(&clos);
 
-	/*Add closure 0.*/
-	clos.dfa_sid = 0;
-	if((r = clos_add_rule(decl, &clos, T_PARSER_NONTERM_MIN, 1)) < 0)
-		goto end;
-
-	if((cid = clos_array_add(&c_array, &clos)) < 0){
-		r = T_ERR_NOMEM;
+	/*Create the first state.*/
+	if((clos.sid = decl_add_state(decl)) < 0){
+		r = clos.sid;
 		goto end;
 	}
-	prod_array_init(&clos);
 
-	/*Add end state.*/
-	if((sid = t_auto_add_state(&decl->dfa, -1)) < 0)
+	prod_set_init(&clos);
+
+	prod.rule_id = rid;
+	prod.expr_id = 0;
+	prod.dot     = 0;
+
+	if((r = prod_set_add(&clos, &prod, NULL)) < 0)
 		goto end;
 
-	T_ASSERT(sid == 1);
-
-	/*Add closure 0.*/
-	clos.dfa_sid = sid;
-	if((cid = clos_array_add(&c_array, &clos)) < 0){
-		r = T_ERR_NOMEM;
-		goto end;
-	}
-	prod_array_init(&clos);
-
-	if((r = cid_queue_push_back(&c_queue, &cid)) < 0)
+	if((r = clos_array_add(&c_array, &clos)) < 0)
 		goto end;
 
-	/*Calulate closure 0.*/
-	if((r = clos_build(decl, 0, &c_queue, &c_array)) < 0)
-		goto end;
+	prod_set_init(&clos);
 
-	/*Check all the closures.*/
-	while(!cid_queue_empty(&c_queue)){
-		cid_queue_pop_back(&c_queue, &cid);
-
-		if((r = clos_build(decl, cid, &c_queue, &c_array)) < 0)
+	/*Create all the closures.*/
+	id = 0;
+	do{
+		if((r = clos_build(decl, id, &c_array)) < 0)
 			goto end;
-	}
 
-	t_auto_dump(&decl->dfa);
+		id++;
+	}while(id < clos_array_length(&c_array));
+
+#ifdef T_ENABLE_DEBUG
+	t_parser_decl_dump(decl);
+#endif
+
 	r = T_OK;
 end:
-	prod_array_deinit(&clos);
+	prod_set_deinit(&clos);
 	clos_array_deinit(&c_array);
-	cid_queue_deinit(&c_queue);
+
 	return r;
+}
+
+void
+t_parser_decl_dump(T_ParserDecl *decl)
+{
+	T_ID rid, eid, tid, sid;
+
+	T_ASSERT(decl);
+
+	fprintf(stderr, "parser decl rules:%d\n", rule_array_length(decl));
+
+	for(rid = 0; rid < rule_array_length(decl); rid++){
+		T_ParserRule *rule = rule_array_element(decl, rid);
+
+		fprintf(stderr, "rule %d:\n", rid);
+
+		for(eid = 0; eid < expr_array_length(rule); eid++){
+			T_ParserExpr *expr = expr_array_element(rule, eid);
+
+			fprintf(stderr, "\texpr %d: ", eid);
+
+			for(tid = 0; tid < token_array_length(expr); tid++){
+				T_ParserToken tok = *token_array_element(expr, tid);
+				fprintf(stderr, "%08x ", tok);
+			}
+
+			fprintf(stderr, "\n");
+		}
+	}
+
+	for(sid = 0; sid < state_array_length(decl); sid++){
+		T_ParserState *s = state_array_element(decl, sid);
+		T_ParserEdge *e;
+		
+		fprintf(stderr, "state %d:\n", sid);
+
+		fprintf(stderr, "\tshift: ");
+		eid = s->shifts;
+		while(eid != -1){
+			e = edge_array_element(decl, eid);
+			fprintf(stderr, "%08x->%d ", e->symbol, e->dest);
+			eid = e->next;
+		}
+		fprintf(stderr, "\n");
+
+		if(s->reduce != T_PARSER_REDUCE_NONE){
+			fprintf(stderr, "\treduce: %08x\n", s->reduce);
+		}
+
+		fprintf(stderr, "\tgoto: ");
+		eid = s->jumps;
+		while(eid != -1){
+			e = edge_array_element(decl, eid);
+			fprintf(stderr, "%08x->%d ", e->symbol, e->dest);
+			eid = e->next;
+		}
+		fprintf(stderr, "\n");
+	}
 }
 
 #define T_QUEUE_TYPE       T_Parser
@@ -590,6 +794,8 @@ t_parser_init(T_Parser *parser, T_ParserDecl *decl, T_Lex *lex)
 	parser->lex  = lex;
 	parser->user_data = NULL;
 	parser->reduce    = NULL;
+	parser->fetched   = T_FALSE;
+	parser->reduce_count = 0;
 
 	if((r = value_queue_init(parser)) < 0)
 		return r;
@@ -606,11 +812,12 @@ t_parser_deinit(T_Parser *parser)
 }
 
 void
-t_parser_set_reduce(T_Parser *parser, T_ParserReduceFunc func, void *user_data)
+t_parser_set_func(T_Parser *parser, T_ParserValueFunc val, T_ParserReduceFunc reduce, void *user_data)
 {
 	T_ASSERT(parser);
 
-	parser->reduce = func;
+	parser->value  = val;
+	parser->reduce = reduce;
 	parser->user_data = user_data;
 }
 
@@ -622,9 +829,166 @@ t_parser_set_reduce(T_Parser *parser, T_ParserReduceFunc func, void *user_data)
 #define T_ALLOC_FUNC(name) t_parser_##name
 #include <t_alloc.h>
 
+static void
+stack_dump(T_Parser *parser)
+{
+	int pos;
+
+	fprintf(stderr, "stack size %d\n", value_queue_length(parser));
+	pos = 0;
+
+	while(pos < value_queue_length(parser)){
+		T_ParserValue *pv = value_queue_back(parser, pos);
+		fprintf(stderr, "\tstack %d: %d %p\n", pos, pv->sid, pv->value);
+		pos++;
+	}
+}
+
 T_Result
 t_parser_parse(T_Parser *parser)
 {
+	T_ParserDecl *decl;
+	T_Lex *lex;
+	T_ParserValueFunc vfunc;
+	T_ParserReduceFunc rfunc;
+	void *udata;
+	T_ParserValue pv;
+	T_Result r;
+	T_LexToken fetched_tok;
+
+	T_ASSERT(parser);
+
+	decl = parser->decl;
+	lex  = parser->lex;
+	vfunc = parser->value;
+	rfunc = parser->reduce;
+	udata = parser->user_data;
+
+	if(state_array_length(decl) == 0)
+		return T_ERR_NOTINIT;
+
+	memset(&pv, 0, sizeof(pv));
+
+	if((r = value_queue_push_back(parser, &pv)) < 0)
+		return r;
+
+	while(1){
+		T_ParserValue *top;
+		T_ParserState *s;
+		T_ParserEdge *e;
+		T_ID eid;
+
+next_state:
+
+		top = value_queue_back(parser, 0);
+
+		if(!parser->fetched){
+			if((fetched_tok = t_lex_lex(lex, &parser->fetched_v.loc)) < T_LEX_EOF)
+				return fetched_tok;
+
+			parser->fetched_v.value = NULL;
+
+			if(vfunc){
+				if((r = vfunc(udata, parser, fetched_tok, &parser->fetched_v.value)) < 0)
+					return r;
+			}
+
+			parser->fetched = T_TRUE;
+		}
+
+		T_DEBUG_I("input token %08x", fetched_tok);
+
+#ifdef T_ENABLE_DEBUG
+		stack_dump(parser);
+#endif
+
+		/*Shift check.*/
+		s = state_array_element(decl, top->sid);
+		eid = s->shifts;
+		while(eid != -1){
+			e = edge_array_element(decl, eid);
+			if(e->symbol == fetched_tok){
+				parser->fetched_v.sid   = e->dest;
+				if((r = value_queue_push_back(parser, &parser->fetched_v)) < 0)
+					return r;
+				parser->fetched = T_FALSE;
+
+				T_DEBUG_I("shift to state %d", e->dest);
+				goto next_state;
+			}
+			eid = e->next;
+		}
+
+		/*Reduce check.*/
+		if(s->reduce != -1){
+			int rid;
+			int tid;
+			int pop;
+			T_ParserReduce reduce;
+			T_ParserToken tok;
+
+			rid = T_PARSER_RDATA_RID(s->reduce);
+			tid = T_PARSER_RDATA_TID(s->reduce);
+			pop = T_PARSER_RDATA_POP(s->reduce);
+
+			parser->reduce_count = pop;
+
+			if(T_PARSER_RDATA_IS_NT(s->reduce)){
+				tok = T_PARSER_NONTERM(tid);
+			}else{
+				tok = T_PARSER_REDUCE(tid);
+				pop = 0;
+			}
+
+			reduce = T_PARSER_REDUCE(rid);
+
+			T_DEBUG_I("reduce %d use rule %08x", pop, reduce);
+
+			if(rfunc){
+				if((r = rfunc(udata, parser, reduce, &pv.value)) < 0)
+					return r;
+			}
+
+			if(pop){
+				T_ParserValue *bot = value_queue_back(parser, pop - 1);
+
+				pv.loc.user_data    = bot->loc.user_data;
+				pv.loc.first_lineno = bot->loc.first_lineno;
+				pv.loc.first_column = bot->loc.first_column;
+				pv.loc.last_lineno  = bot->loc.last_lineno;
+				pv.loc.last_column  = bot->loc.last_column;
+			}else{
+				pv.loc = top->loc;
+			}
+
+			value_queue_pop_back_n(parser, pop);
+
+			top = value_queue_back(parser, 0);
+
+			s = state_array_element(decl, top->sid);
+			eid = s->jumps;
+			while(eid != -1){
+				e = edge_array_element(decl, eid);
+				if(e->symbol == tok){
+					pv.sid   = e->dest;
+					if((r = value_queue_push_back(parser, &pv)) < 0)
+						return r;
+
+					T_DEBUG_I("goto state %d", e->dest);
+					goto next_state;
+				}
+				eid = e->next;
+			}
+		}
+
+		if(value_queue_length(parser) == 1)
+			return T_OK;
+
+		T_DEBUG_E("parser error");
+		return T_ERR_SYNTAX;
+	}
+
+	return T_OK;
 }
 
 T_Result
@@ -632,12 +996,12 @@ t_parser_get_loc(T_Parser *parser, int n, T_LexLoc *loc)
 {
 	T_ParserValue *pv;
 
-	T_ASSERT(parser && loc);
+	T_ASSERT(parser && loc && (n >= 0) && (n < parser->reduce_count));
 
 	if(n >= value_queue_length(parser))
 		return T_ERR_ARG;
 
-	pv = value_queue_back(parser, n);
+	pv = value_queue_back(parser, parser->reduce_count - n - 1);
 	*loc = pv->loc;
 
 	return T_OK;
@@ -648,12 +1012,12 @@ t_parser_get_value(T_Parser *parser, int n, void **value)
 {
 	T_ParserValue *pv;
 
-	T_ASSERT(parser && value);
+	T_ASSERT(parser && value && (n >= 0) && (n < parser->reduce_count));
 
 	if(n >= value_queue_length(parser))
 		return T_ERR_ARG;
 
-	pv = value_queue_back(parser, n);
+	pv = value_queue_back(parser, parser->reduce_count - n - 1);
 	*value= pv->value;
 
 	return T_OK;

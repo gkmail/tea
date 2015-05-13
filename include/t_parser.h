@@ -24,9 +24,10 @@
 extern "C" {
 #endif
 
-#define T_PARSER_NONTERM_MIN 10000
-#define T_PARSER_PRIO_MIN    20000
-#define T_PARSER_REDUCE_MIN  30000
+#define T_PARSER_NONTERM_MIN 0x20000
+#define T_PARSER_PRIO_MIN    0x30000
+#define T_PARSER_REDUCE_MIN  0x40000
+#define T_PARSER_REDUCE_NONE 0xFFFFF
 
 #define T_PARSER_IS_TERM(n)    (((n)>=T_LEX_EOF) && ((n)<T_PARSER_NONTERM_MIN))
 #define T_PARSER_IS_NONTERM(n) (((n)>=T_PARSER_NONTERM_MIN) && ((n)<T_PARSER_PRIO_MIN))
@@ -35,6 +36,9 @@ extern "C" {
 
 #define T_PARSER_NONTERM(id)   ((id)+T_PARSER_NONTERM_MIN)
 #define T_PARSER_NONTERM_ID(n) ((n)-T_PARSER_NONTERM_MIN)
+
+#define T_PARSER_REDUCE(id)    ((id)+T_PARSER_REDUCE_MIN)
+#define T_PARSER_REDUCE_ID(n)  ((n)-T_PARSER_REDUCE_MIN)
 
 #define T_PARSER_PRIO_LEFT  0
 #define T_PARSER_PRIO_RIGHT 1
@@ -46,11 +50,7 @@ typedef int T_ParserTerm;
 typedef int T_ParserNonterm;
 typedef int T_ParserPrio;
 typedef int T_ParserReduce;
-
-typedef struct{
-	int            token;
-	T_ParserReduce reduce;
-}T_ParserToken;
+typedef int T_ParserToken;
 
 typedef struct{
 	T_ARRAY_DECL(T_ParserToken, tokens);
@@ -62,23 +62,42 @@ typedef struct{
 }T_ParserRule;
 
 typedef struct{
+	int                  shifts;
+	int                  jumps;
+	T_ParserReduce       reduce;
+}T_ParserState;
+
+typedef struct{
+	int                  next;
+	int                  dest;
+	int                  symbol;
+}T_ParserEdge;
+
+typedef struct{
 	T_ARRAY_DECL(T_ParserRule, rules);
-	T_Auto               dfa;
+	T_ARRAY_DECL(T_ParserState, states);
+	T_ARRAY_DECL(T_ParserEdge, edges);
 }T_ParserDecl;
 
 typedef struct T_Parser_s T_Parser;
+typedef T_Result (*T_ParserValueFunc)(void *user_data, T_Parser *parser, T_LexToken tok, void **pv);
 typedef T_Result (*T_ParserReduceFunc)(void *user_data, T_Parser *parser, T_ParserReduce reduce, void **value);
 
 typedef struct{
 	T_LexLoc            loc;
 	void               *value;
+	int                 sid;
 }T_ParserValue;
 
 struct T_Parser_s{
 	T_Lex              *lex;
 	T_ParserDecl       *decl;
 	void               *user_data;
+	T_ParserValueFunc   value;
 	T_ParserReduceFunc  reduce;
+	T_ParserValue       fetched_v;
+	T_Bool              fetched;
+	int                 reduce_count;
 	T_QUEUE_DECL(T_ParserValue, stack);
 };
 
@@ -89,12 +108,13 @@ extern void          t_parser_decl_destroy(T_ParserDecl *decl);
 extern T_Result      t_parser_decl_add_rule(T_ParserDecl *decl, T_ParserNonterm nonterm, ...);
 extern T_Result      t_parser_decl_add_rulev(T_ParserDecl *decl, T_ParserNonterm nonterm, int *rule, int len);
 extern T_Result      t_parser_decl_build(T_ParserDecl *decl);
+extern void          t_parser_decl_dump(T_ParserDecl *decl);
 
 extern T_Result      t_parser_init(T_Parser *parser, T_ParserDecl *decl, T_Lex *lex);
 extern void          t_parser_deinit(T_Parser *parser);
 extern T_Parser*     t_parser_create(T_ParserDecl *decl, T_Lex *lex);
 extern void          t_parser_destroy(T_Parser *parser);
-extern void          t_parser_set_reduce(T_Parser *parser, T_ParserReduceFunc func, void *user_data);
+extern void          t_parser_set_func(T_Parser *parser, T_ParserValueFunc val, T_ParserReduceFunc reduce, void *user_data);
 extern T_Result      t_parser_parse(T_Parser *parser);
 extern T_Result      t_parser_get_loc(T_Parser *parser, int n, T_LexLoc *loc);
 extern T_Result      t_parser_get_value(T_Parser *parser, int n, void **value);

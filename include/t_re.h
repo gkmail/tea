@@ -26,12 +26,40 @@ extern "C" {
 
 typedef T_Auto T_Re;
 
+#define T_RE_EPSILON 0xFFFF
+#define T_RE_BOL     0xFFFE
+#define T_RE_EOL     0xFFFD
+
+#define T_RE_CHAR_MIN 0
+#define T_RE_CHAR_MAX 0xFFFF
+
 typedef int T_ReFlags;
 
-extern T_Result   t_re_to_auto(T_Auto *aut, const char *str, int len, T_AutoData data, T_ReFlags flags, int *errcol);
+#define T_RE_FL_IGNORE_CASE 1
+#define T_RE_FL_NO_BOL      2
+
+typedef struct{
+	T_ID   s_begin;
+	T_ID   s_end;
+	T_ID   s_first;
+	T_ID   s_last;
+	T_ID   e_first;
+	T_ID   e_last;
+}T_ReMach;
+
+extern T_Result   t_re_to_auto(T_Re *re, const char *str, int len, T_AutoData data, T_ReFlags flags, int *errcol);
 extern T_Re*      t_re_create(const char *str, int len, T_ReFlags flags, int *errcol);
 extern void       t_re_destroy(T_Re *re);
 extern T_Result   t_re_match(T_Re *re, const char *str, int len, int *start, int *end);
+
+extern void       t_re_mach_init(T_ReMach *mach);
+extern T_ID       t_re_mach_add_state(T_Re *re, T_ReMach *mach, T_AutoData data);
+extern T_ID       t_re_mach_add_edge(T_Re *re, T_ReMach *mach, T_ID from, T_ID to, T_AutoSymbol symbol);
+extern T_Result   t_re_mach_or(T_Re *re, T_ReMach *mach, T_ReMach *mor);
+extern T_Result   t_re_mach_link(T_Re *re, T_ReMach *mach, T_ReMach *ml);
+extern T_Result   t_re_mach_repeat(T_Re *re, T_ReMach *mach, int min, int max);
+
+extern T_Result   t_re_to_dfa(T_Re *nfa, T_Re *dfa);
 
 #ifdef __cplusplus
 }

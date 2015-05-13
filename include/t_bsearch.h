@@ -38,7 +38,7 @@ T_BSEARCH_FUNC(bsearch)(T_BSEARCH_TYPE *aa, int n, T_BSEARCH_TYPE *key)
 	int mid;
 	int v;
 
-	if(!aa && !n)
+	if(!aa || !n)
 		return -1;
 
 	T_ASSERT(aa && (n >= 0) && key);
