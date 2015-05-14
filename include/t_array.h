@@ -25,10 +25,6 @@
 	#define T_ARRAY_FUNC(name) name
 #endif
 
-#ifndef T_ARRAY_REALLOC
-	#define T_ARRAY_REALLOC(ptr, size) realloc(ptr, size)
-#endif
-
 #ifndef T_ARRAY_MALLOC
 	#ifdef T_ARRAY_REALLOC
 		#define T_ARRAY_MALLOC(size) T_ARRAY_REALLOC(NULL, size) 
@@ -43,6 +39,10 @@
 	#else
 		#define T_ARRAY_FREE(ptr) free(ptr)
 	#endif
+#endif
+
+#ifndef T_ARRAY_REALLOC
+	#define T_ARRAY_REALLOC(ptr, size) realloc(ptr, size)
 #endif
 
 #ifndef T_ARRAY_EQUAL

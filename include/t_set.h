@@ -32,10 +32,6 @@
 	#define T_ARRAY_FUNC   T_SET_FUNC
 #endif
 
-#ifdef T_SET_REALLOC
-	#define T_ARRAY_REALLOC T_SET_REALLOC
-#endif
-
 #ifdef T_SET_MALLOC
 	#define T_ARRAY_MALLOC T_SET_MALLOC
 #elif defined(T_SET_REALLOC)
@@ -46,6 +42,10 @@
 	#define T_ARRAY_FREE T_SET_FREE
 #elif defined(T_SET_REALLOC)
 	#define T_ARRAY_FREE(ptr) T_SET_REALLOC(ptr, 0)
+#endif
+
+#ifdef T_SET_REALLOC
+	#define T_ARRAY_REALLOC T_SET_REALLOC
 #endif
 
 #ifdef T_SET_ELEM_DEINIT

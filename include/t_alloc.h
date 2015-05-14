@@ -36,11 +36,19 @@
 #endif
 
 #ifndef T_ALLOC_MALLOC
-	#define T_ALLOC_MALLOC(size) malloc(size)
+	#ifdef T_ALLOC_REALLOC
+		#define T_ALLOC_MALLOC(size) T_ALLOC_REALLOC(NULL, size)
+	#else
+		#define T_ALLOC_MALLOC(size) malloc(size)
+	#endif
 #endif
 
 #ifndef T_ALLOC_FREE
-	#define T_ALLOC_FREE(ptr)    free(ptr)
+	#ifdef T_ALLOC_REALLOC
+		#define T_ALLOC_FREE(ptr)    T_ALLOC_REALLOC(ptr, 0)
+	#else
+		#define T_ALLOC_FREE(ptr)    free(ptr)
+	#endif
 #endif
 
 #ifndef T_ALLOC_INIT
@@ -86,5 +94,8 @@ T_ALLOC_FUNC(destroy)(T_ALLOC_TYPE *type)
 #undef T_ALLOC_FUNC
 #undef T_ALLOC_MALLOC
 #undef T_ALLOC_FREE
+#ifdef T_ALLOC_REALLOC
+	#undef T_ALLOC_REALLOC
+#endif
 #undef T_ALLOC_INIT
 #undef T_ALLOC_DEINIT

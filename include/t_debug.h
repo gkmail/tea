@@ -25,6 +25,12 @@ extern "C" {
 #endif
 
 #ifdef T_ENABLE_DEBUG
+	#ifndef T_GLOBAL_DEBUG
+		#undef T_ENABLE_DEBUG
+	#endif
+#endif
+
+#ifdef T_ENABLE_DEBUG
 #define T_DEBUG(t, a...)\
 	T_MACRO_BEGIN\
 		fprintf(stderr, "%s", t);\

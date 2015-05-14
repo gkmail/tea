@@ -359,16 +359,12 @@ static T_Result
 add_clos_prods(T_ParserDecl *decl, Closure *prods, Closure *clos, ProdQueue *q)
 {
 	T_SetIter iter;
-	T_ParserRule *rule;
-	T_ParserExpr *expr;
 	Prod *prod;
 	T_Result r;
 
 	prod_set_iter_first(clos, &iter);
 	while(!prod_set_iter_last(&iter)){
 		prod = prod_set_iter_data(&iter);
-		rule = rule_array_element(decl, prod->rule_id);
-		expr = expr_array_element(rule, prod->expr_id);
 
 		if((r = prod_set_add(prods, prod, NULL)) < 0)
 			return r;
@@ -864,7 +860,7 @@ t_parser_parse(T_Parser *parser)
 	void *udata;
 	T_ParserValue pv;
 	T_Result r;
-	T_LexToken fetched_tok;
+	T_LexToken fetched_tok = T_LEX_EOF;
 	T_Bool error = T_FALSE;
 
 	T_ASSERT(parser);

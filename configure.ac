@@ -45,7 +45,7 @@ AC_SUBST(LT_AGE)
 AC_CONFIG_SRCDIR([include/t_types.h])
 AC_CONFIG_HEADERS([include/config.h])
 
-CFLAGS="-Waddress -Warray-bounds -Wchar-subscripts -Wenum-compare -Wimplicit-int -Wimplicit-function-declaration -Wcomment -Wformat -Wmain -Wmaybe-uninitialized -Wmissing-braces -Wnonnull -Wopenmp-simd -Wparentheses -Wpointer-sign -Wreturn-type -Wsequence-point -Wsign-compare -Wstrict-aliasing -Wstrict-overflow=1 -Wswitch -Wtrigraphs -Wuninitialized -Wunknown-pragmas -Wunused-label -Wunused-value -Wunused-variable -Wvolatile-register-var"
+CFLAGS="-Wall -Wno-unused-function -O3"
 
 AC_ARG_ENABLE([memwatch], AS_HELP_STRING([--enable-memwatch], [use memwatch[default=no]]), , [enable_memwatch=no])
 if test "x$enable_memwatch" = "xyes"; then
@@ -58,6 +58,7 @@ fi
 AC_ARG_ENABLE([debug], AS_HELP_STRING([--enable-debug], [debug mode[default=no]]), , [enable_debug=no])
 if test "x$enable_debug" = "xyes"; then
 	CFLAGS="$CFLAGS -g"
+	AC_DEFINE_UNQUOTED(T_GLOBAL_DEBUG, 1, [Define if you want to enable debug information.])
 fi
 
 

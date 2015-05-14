@@ -26,11 +26,19 @@
 #endif
 
 #ifndef T_QUEUE_MALLOC
-	#define T_QUEUE_MALLOC(size) malloc(size)
+	#ifdef T_QUEUE_REALLOC
+		#define T_QUEUE_MALLOC(size) T_QUEUE_REALLOC(NULL, size)
+	#else
+		#define T_QUEUE_MALLOC(size) malloc(size)
+	#endif
 #endif
 
 #ifndef T_QUEUE_FREE
-	#define T_QUEUE_FREE(ptr) free(ptr)
+	#ifdef T_QUEUE_REALLOC
+		#define T_QUEUE_FREE(ptr) T_QUEUE_REALLOC(ptr, 0)
+	#else
+		#define T_QUEUE_FREE(ptr) free(ptr)
+	#endif
 #endif
 
 #ifdef T_QUEUE_ELEM_DEINIT
@@ -227,7 +235,11 @@ T_QUEUE_FUNC(queue_back)(T_QUEUE_TYPE *q, int n)
 	return &q->T_QUEUE_NAME.buff[pos];
 }
 
-#undef T_QUEUE_REALLOC
+#ifdef T_QUEUE_REALLOC
+	#undef T_QUEUE_REALLOC
+#endif
+#undef T_QUEUE_MALLOC
+#undef T_QUEUE_FREE
 #undef T_QUEUE_TYPE
 #undef T_QUEUE_ELEM_TYPE
 #undef T_QUEUE_NAME
