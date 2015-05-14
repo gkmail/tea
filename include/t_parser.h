@@ -25,9 +25,15 @@ extern "C" {
 #endif
 
 #define T_PARSER_NONTERM_MIN 0x20000
-#define T_PARSER_PRIO_MIN    0x30000
-#define T_PARSER_REDUCE_MIN  0x40000
-#define T_PARSER_REDUCE_NONE 0xFFFFF
+#define T_PARSER_NONTERM_S   T_PARSER_NONTERM_MIN
+#define T_PARSER_NONTERM_ERR 0x20FFF
+#define T_PARSER_PRIO_MIN    0x21000
+#define T_PARSER_REDUCE_MIN  0x22000
+#define T_PARSER_REDUCE_NONE T_PARSER_REDUCE_MIN
+
+#define T_PARSER_NONTERM_BEGIN (T_PARSER_NONTERM_MIN + 1)
+#define T_PARSER_PRIO_BEGIN    (T_PARSER_PRIO_MIN + 2)
+#define T_PARSER_REDUCE_BEGIN  (T_PARSER_REDUCE_NONE + 1)
 
 #define T_PARSER_IS_TERM(n)    (((n)>=T_LEX_EOF) && ((n)<T_PARSER_NONTERM_MIN))
 #define T_PARSER_IS_NONTERM(n) (((n)>=T_PARSER_NONTERM_MIN) && ((n)<T_PARSER_PRIO_MIN))
@@ -42,7 +48,7 @@ extern "C" {
 
 #define T_PARSER_PRIO_LEFT  0
 #define T_PARSER_PRIO_RIGHT 1
-#define T_PARSER_PRIO(v, d)    (((v)*2+T_PARSER_PRIO_MIN)|(d))
+#define T_PARSER_PRIO(v, d)    (((v)*2+T_PARSER_PRIO_BEGIN)|(d))
 #define T_PARSER_PRIO_DIR(p)   ((p)&1)
 #define T_PARSER_PRIO_VALUE(p) ((p)&~1)
 
@@ -82,6 +88,7 @@ typedef struct{
 typedef struct T_Parser_s T_Parser;
 typedef T_Result (*T_ParserValueFunc)(void *user_data, T_Parser *parser, T_LexToken tok, void **pv);
 typedef T_Result (*T_ParserReduceFunc)(void *user_data, T_Parser *parser, T_ParserReduce reduce, void **value);
+typedef void     (*T_ParserErrorFunc)(void *user_data, T_Parser *parser);
 
 typedef struct{
 	T_LexLoc            loc;
@@ -95,6 +102,7 @@ struct T_Parser_s{
 	void               *user_data;
 	T_ParserValueFunc   value;
 	T_ParserReduceFunc  reduce;
+	T_ParserErrorFunc   error;
 	T_ParserValue       fetched_v;
 	T_Bool              fetched;
 	int                 reduce_count;
@@ -114,7 +122,7 @@ extern T_Result      t_parser_init(T_Parser *parser, T_ParserDecl *decl, T_Lex *
 extern void          t_parser_deinit(T_Parser *parser);
 extern T_Parser*     t_parser_create(T_ParserDecl *decl, T_Lex *lex);
 extern void          t_parser_destroy(T_Parser *parser);
-extern void          t_parser_set_func(T_Parser *parser, T_ParserValueFunc val, T_ParserReduceFunc reduce, void *user_data);
+extern void          t_parser_set_func(T_Parser *parser, T_ParserValueFunc val, T_ParserReduceFunc reduce, T_ParserErrorFunc err, void *user_data);
 extern T_Result      t_parser_parse(T_Parser *parser);
 extern T_Result      t_parser_get_loc(T_Parser *parser, int n, T_LexLoc *loc);
 extern T_Result      t_parser_get_value(T_Parser *parser, int n, void **value);

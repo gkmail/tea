@@ -5,7 +5,7 @@ enum{
 };
 
 enum{
-	EXPR = T_PARSER_NONTERM_MIN
+	EXPR = T_PARSER_NONTERM_BEGIN
 };
 
 enum{
@@ -16,7 +16,7 @@ enum{
 };
 
 enum{
-	REDUCE_ADD = T_PARSER_REDUCE_MIN,
+	REDUCE_ADD = T_PARSER_REDUCE_BEGIN,
 	REDUCE_SUB,
 	REDUCE_MUL,
 	REDUCE_DIV,
@@ -93,6 +93,14 @@ reduce_func(void *udata, T_Parser *parser, T_ParserReduce reduce, void **val)
 	return T_OK;
 }
 
+static void
+error_func(void *udata, T_Parser *parser)
+{
+	T_LexLoc *loc = &parser->fetched_v.loc;
+
+	printf("error: %d.%d-%d.%d\n", loc->first_lineno, loc->first_column, loc->last_lineno, loc->last_column);
+}
+
 int main(int argc, char **argv)
 {
 	T_LexDecl *l_decl;
@@ -116,11 +124,12 @@ int main(int argc, char **argv)
 	t_parser_decl_add_rule(p_decl, EXPR, EXPR, '*', EXPR, REDUCE_MUL, PRIO_MUL, -1);
 	t_parser_decl_add_rule(p_decl, EXPR, EXPR, '/', EXPR, REDUCE_DIV, PRIO_DIV, -1);
 	t_parser_decl_add_rule(p_decl, EXPR, DIGIT, REDUCE_DIGIT, -1);
+	t_parser_decl_add_rule(p_decl, EXPR, T_PARSER_NONTERM_ERR, EXPR, REDUCE_DIGIT, -1);
 	t_parser_decl_build(p_decl);
 
 	lex = t_lex_create(l_decl);
 	parser = t_parser_create(p_decl, lex);
-	t_parser_set_func(parser, value_func, reduce_func, NULL);
+	t_parser_set_func(parser, value_func, reduce_func, error_func, NULL);
 
 	t_lex_push_text(lex, "100 + 3.14 * 2 - 100 / 50", -1, NULL, NULL);
 	t_parser_parse(parser);

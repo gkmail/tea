@@ -35,7 +35,8 @@ typedef enum{
 	T_ERR_ARG      = -1002,
 	T_ERR_NOTINIT  = -1003,
 	T_ERR_REINIT   = -1004,
-	T_ERR_IO       = -1005
+	T_ERR_IO       = -1005,
+	T_ERR_UNDEF    = -1006
 }T_Result;
 
 typedef int    T_ID;

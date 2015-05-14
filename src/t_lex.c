@@ -485,3 +485,19 @@ t_lex_set_more(T_Lex *lex)
 	lex->more = T_TRUE;
 }
 
+int
+t_lex_getch(T_Lex *lex)
+{
+	T_ASSERT(lex);
+
+	return lex_getch(lex);
+}
+
+void
+t_lex_unget(T_Lex *lex, int ch)
+{
+	T_ASSERT(lex);
+
+	lex_unget(lex, ch);
+}
+

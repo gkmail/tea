@@ -1,1 +1,4 @@
-TEA: a simple C tool library.
+TEA: a simple C tool library contains the following functions
+  - Lexical analyzer
+  - LALR1 parser generator
+  - Basic algorithm functions

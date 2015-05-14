@@ -64,9 +64,9 @@ struct T_LexInput_s{
 };
 
 typedef struct{
-	T_LexDecl   *decl;
-	T_ID         curr_cond;
-	T_Bool       more;
+	T_LexDecl     *decl;
+	T_ID           curr_cond;
+	T_Bool         more;
 	T_SLIST_DECL(T_LexInput, inputs);
 	T_ARRAY_DECL(char, text);
 }T_Lex;
@@ -89,6 +89,8 @@ extern T_LexToken t_lex_lex(T_Lex *lex, T_LexLoc *loc);
 extern T_Result   t_lex_set_cond(T_Lex *lex, T_LexCond cond);
 extern const char* t_lex_get_text(T_Lex *lex);
 extern void       t_lex_set_more(T_Lex *lex);
+extern int        t_lex_getch(T_Lex *lex);
+extern void       t_lex_unget(T_Lex *lex, int ch);
 
 #ifdef __cplusplus
 }
