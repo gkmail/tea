@@ -890,15 +890,17 @@ next_state:
 		top = value_queue_back(parser, 0);
 
 		if(!parser->fetched){
-			if((fetched_tok = t_lex_lex(lex, &parser->fetched_v.loc)) < T_LEX_EOF)
-				return fetched_tok;
+			do{
+				if((fetched_tok = t_lex_lex(lex, &parser->fetched_v.loc)) < T_LEX_EOF)
+					return fetched_tok;
 
-			parser->fetched_v.value = NULL;
+				parser->fetched_v.value = NULL;
 
-			if(vfunc){
-				if((r = vfunc(udata, parser, fetched_tok, &parser->fetched_v.value)) < 0)
-					return r;
-			}
+				if(vfunc){
+					if((fetched_tok = vfunc(udata, parser, fetched_tok, &parser->fetched_v.value)) < T_LEX_EOF)
+						return fetched_tok;
+				}
+			}while(!fetched_tok);
 
 			parser->fetched = T_TRUE;
 		}

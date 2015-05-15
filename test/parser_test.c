@@ -23,7 +23,7 @@ enum{
 	REDUCE_DIGIT
 };
 
-static T_Result
+static T_LexToken
 value_func(void *udata, T_Parser *parser, T_LexToken tok, void **val)
 {
 	const char *str;
@@ -37,7 +37,7 @@ value_func(void *udata, T_Parser *parser, T_LexToken tok, void **val)
 			break;
 	}
 
-	return T_OK;
+	return tok;
 }
 
 static T_Result

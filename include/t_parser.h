@@ -86,9 +86,9 @@ typedef struct{
 }T_ParserDecl;
 
 typedef struct T_Parser_s T_Parser;
-typedef T_Result (*T_ParserValueFunc)(void *user_data, T_Parser *parser, T_LexToken tok, void **pv);
-typedef T_Result (*T_ParserReduceFunc)(void *user_data, T_Parser *parser, T_ParserReduce reduce, void **value);
-typedef void     (*T_ParserErrorFunc)(void *user_data, T_Parser *parser);
+typedef T_LexToken (*T_ParserValueFunc)(void *user_data, T_Parser *parser, T_LexToken tok, void **pv);
+typedef T_Result   (*T_ParserReduceFunc)(void *user_data, T_Parser *parser, T_ParserReduce reduce, void **value);
+typedef void       (*T_ParserErrorFunc)(void *user_data, T_Parser *parser);
 
 typedef struct{
 	T_LexLoc            loc;

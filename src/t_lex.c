@@ -344,6 +344,7 @@ t_lex_lex(T_Lex *lex, T_LexLoc *loc)
 	T_AutoState *s;
 	T_AutoEdge *e;
 	int sym;
+	int old_text_len;
 	T_Bool first;
 
 	T_ASSERT(lex);
@@ -353,6 +354,8 @@ retry:
 
 	if(!lex->more)
 		text_array_reinit(lex);
+
+	old_text_len = text_array_length(lex);
 
 	dfa = cond_array_element(lex->decl, lex->curr_cond);
 	sid = 0;
@@ -415,7 +418,7 @@ next_state:
 			break;
 		}
 
-		if((sym == T_LEX_EOF) && (sid == 0)){
+		if((sym == T_LEX_EOF) && (text_array_length(lex) == old_text_len)){
 			tok = T_LEX_EOF;
 		}else{
 			tok = T_ERR_SYNTAX;

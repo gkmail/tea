@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 #ifdef T_ENABLE_DEBUG
-	#ifndef T_GLOBAL_DEBUG
+	#ifdef T_DISABLE_DEBUG
 		#undef T_ENABLE_DEBUG
 	#endif
 #endif

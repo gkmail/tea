@@ -58,7 +58,8 @@ fi
 AC_ARG_ENABLE([debug], AS_HELP_STRING([--enable-debug], [debug mode[default=no]]), , [enable_debug=no])
 if test "x$enable_debug" = "xyes"; then
 	CFLAGS="$CFLAGS -g"
-	AC_DEFINE_UNQUOTED(T_GLOBAL_DEBUG, 1, [Define if you want to enable debug information.])
+else
+	AC_DEFINE_UNQUOTED(T_DISABLE_DEBUG, 1, [Define if you want to disable debug information.])
 fi
 
 
