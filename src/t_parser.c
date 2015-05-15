@@ -892,7 +892,7 @@ next_state:
 		if(!parser->fetched){
 			do{
 				if((fetched_tok = t_lex_lex(lex, &parser->fetched_v.loc)) < T_LEX_EOF)
-					return fetched_tok;
+					goto error;
 
 				parser->fetched_v.value = NULL;
 
@@ -995,6 +995,7 @@ next_state:
 		if((value_queue_length(parser) == 1) && (fetched_tok == T_LEX_EOF))
 			return T_OK;
 
+error:
 		if(!error){
 			T_DEBUG_E("parser error");
 
