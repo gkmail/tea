@@ -45,7 +45,7 @@ AC_SUBST(LT_AGE)
 AC_CONFIG_SRCDIR([include/t_types.h])
 AC_CONFIG_HEADERS([include/config.h])
 
-CFLAGS="-Wall -Wno-unused-function -O3"
+CFLAGS="$CFLAGS -Wall -Wno-unused-function -O3"
 
 AC_ARG_ENABLE([memwatch], AS_HELP_STRING([--enable-memwatch], [use memwatch[default=no]]), , [enable_memwatch=no])
 if test "x$enable_memwatch" = "xyes"; then
@@ -87,7 +87,6 @@ AC_TYPE_UINT64_T
 AC_TYPE_UINT8_T
 
 # Checks for library functions.
-AC_FUNC_MALLOC
 AC_CHECK_FUNCS([memset])
 
 AC_OUTPUT([
