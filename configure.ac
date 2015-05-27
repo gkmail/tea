@@ -2,7 +2,9 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([tea], [1.0])
+AC_INIT([tea],
+	0.1.2,
+	[https://gitcafe.com/gkmail/tea])
 
 # Detect the canonical host and target build environment
 AC_CANONICAL_SYSTEM

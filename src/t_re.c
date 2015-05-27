@@ -1821,7 +1821,7 @@ nfa_to_dfa(T_Re *nfa, T_Re *dfa)
 	T_ArrayIter a_iter;
 	T_SetIter s_iter;
 	SGroupQueue q;
-	T_ID sid, eid, dest, dfa_sid, orig_dfa_sid, data_sid;
+	T_ID sid, eid, dest, dfa_sid, orig_dfa_sid = -1, data_sid;
 	T_AutoState *s;
 	T_AutoEdge *e;
 	SGroup *pgrp, grp;
