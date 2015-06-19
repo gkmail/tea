@@ -44,46 +44,56 @@ static T_Result
 reduce_func(void *udata, T_Parser *parser, T_ParserReduce reduce, void **val)
 {
 	float f1, f2, fr;
+	float *pf;
 	void *v;
 
 	switch(reduce){
 		case REDUCE_DIGIT:
 			t_parser_get_value(parser, 0, &v);
 			*val = v;
-			printf("number: %f\n", *(float*)&v);
+			pf = (float*)&v;
+			printf("number: %f\n", *pf);
 			break;
 		case REDUCE_ADD:
 			t_parser_get_value(parser, 0, &v);
-			f1 = *(float*)&v;
+			pf = (float*)&v;
+			f1 = *pf;
 			t_parser_get_value(parser, 2, &v);
-			f2 = *(float*)&v;
+			pf = (float*)&v;
+			f2 = *pf;
 			fr = f1 + f2;
 			*(float*)val = fr;
 			printf("%f + %f = %f\n", f1, f2, fr);
 			break;
 		case REDUCE_SUB:
 			t_parser_get_value(parser, 0, &v);
-			f1 = *(float*)&v;
+			pf = (float*)&v;
+			f1 = *pf;
 			t_parser_get_value(parser, 2, &v);
-			f2 = *(float*)&v;
+			pf = (float*)&v;
+			f2 = *pf;
 			fr = f1 - f2;
 			*(float*)val = fr;
 			printf("%f - %f = %f\n", f1, f2, fr);
 			break;
 		case REDUCE_MUL:
 			t_parser_get_value(parser, 0, &v);
-			f1 = *(float*)&v;
+			pf = (float*)&v;
+			f1 = *pf;
 			t_parser_get_value(parser, 2, &v);
-			f2 = *(float*)&v;
+			pf = (float*)&v;
+			f2 = *pf;
 			fr = f1 * f2;
 			*(float*)val = fr;
 			printf("%f * %f = %f\n", f1, f2, fr);
 			break;
 		case REDUCE_DIV:
 			t_parser_get_value(parser, 0, &v);
-			f1 = *(float*)&v;
+			pf = (float*)&v;
+			f1 = *pf;
 			t_parser_get_value(parser, 2, &v);
-			f2 = *(float*)&v;
+			pf = (float*)&v;
+			f2 = *pf;
 			fr = f1 / f2;
 			*(float*)val = fr;
 			printf("%f / %f = %f\n", f1, f2, fr);
