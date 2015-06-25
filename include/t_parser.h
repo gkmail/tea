@@ -24,6 +24,7 @@
 extern "C" {
 #endif
 
+#define T_PARSER_EPSILON     (-2)
 #define T_PARSER_NONTERM_MIN 0x20000
 #define T_PARSER_NONTERM_S   T_PARSER_NONTERM_MIN
 #define T_PARSER_NONTERM_ERR 0x20FFF

@@ -74,7 +74,7 @@ decl_add_state(T_ParserDecl *decl)
 
 	s.shifts = -1;
 	s.jumps  = -1;
-	s.reduce = -1;
+	s.reduce = T_PARSER_REDUCE_NONE;
 
 	return state_array_add(decl, &s);
 }
@@ -175,7 +175,7 @@ t_parser_decl_add_rulev(T_ParserDecl *decl, T_ParserNonterm nonterm, int *tokens
 	int i;
 	T_Result r;
 
-	T_ASSERT(decl && tokens && (len > 0));
+	T_ASSERT(decl && tokens && (len >= 0));
 
 	if(!T_PARSER_IS_NONTERM(nonterm))
 		return T_ERR_ARG;
@@ -306,13 +306,12 @@ typedef struct{
 #include <t_hash.h>
 
 static T_Result
-add_rule_prods(T_ParserDecl *decl, Closure *prods, int id, ProdQueue *q, T_Bool *has_eps)
+add_rule_prods(T_ParserDecl *decl, Closure *prods, int id, ProdQueue *q, SymClosHash *c_hash)
 {
 	T_ParserRule *rule;
 	T_ParserExpr *expr;
 	T_ArrayIter iter;
 	Prod prod;
-	T_Bool eps = T_FALSE;
 	T_Result r;
 
 	if((id < 0) || (id >= rule_array_length(decl))){
@@ -342,15 +341,35 @@ add_rule_prods(T_ParserDecl *decl, Closure *prods, int id, ProdQueue *q, T_Bool 
 		}
 
 		len = token_array_length(expr);
-		if(len == 1)
-			eps = T_TRUE;
+		if(len == 1){
+			T_ParserToken eps = T_PARSER_EPSILON;
+			Prod nprod;
+			SymClosHashEntry *hent;
+			Closure *nclos;
+
+			T_DEBUG_I("epsilon");
+
+			if((r = sym_clos_hash_add_entry(c_hash, &eps, &hent)) < 0)
+				return r;
+
+			nclos = &hent->data;
+
+			if(r > 0){
+				prod_set_init(nclos);
+				nclos->sid = 0;
+			}
+
+			nprod.rule_id = prod.rule_id;
+			nprod.expr_id = prod.expr_id;
+			nprod.dot     = 1;
+
+			if((r = prod_set_add(nclos, &nprod, NULL)) < 0)
+				return r;
+		}
 
 		expr_array_iter_next(&iter);
 		prod.expr_id++;
 	}
-
-	if(has_eps)
-		*has_eps = eps;
 
 	return T_OK;
 }
@@ -476,23 +495,15 @@ clos_build(T_ParserDecl *decl, T_ID clos_id, ClosArray *c_array)
 		expr = expr_array_element(rule, prod.expr_id);
 		dot  = prod.dot;
 
-		while(dot < token_array_length(expr)){
+		if(dot < token_array_length(expr)){
 			tok = *token_array_element(expr, dot);
 
 			if(T_PARSER_IS_NONTERM(tok) && (tok != T_PARSER_NONTERM_ERR)){
 				int tid = T_PARSER_NONTERM_ID(tok);
-				T_Bool has_eps;
 
-				if((r = add_rule_prods(decl, &prods, tid, &p_queue, &has_eps)) < 0)
+				if((r = add_rule_prods(decl, &prods, tid, &p_queue, &c_hash)) < 0)
 					goto end;
-
-				if(has_eps){
-					dot++;
-					continue;
-				}
 			}
-
-			break;
 		}
 	}
 
@@ -566,7 +577,7 @@ clos_build(T_ParserDecl *decl, T_ID clos_id, ClosArray *c_array)
 
 			if(T_PARSER_IS_REDUCE(sym) && (r_tok != sym)){
 				pclos->sid = -1;
-			}else if(T_PARSER_IS_TERM(sym)){
+			}else if(T_PARSER_IS_TERM(sym) && r_prod.dot){
 				Prod *sprod = prod_set_element(pclos, 0);
 
 				if(prio_check(decl, &r_prod, sprod) > 0){
@@ -584,7 +595,7 @@ clos_build(T_ParserDecl *decl, T_ID clos_id, ClosArray *c_array)
 			flag = T_PARSER_RDATA_NT_FLAG;
 		}else{
 			rid  = T_PARSER_REDUCE_ID(tok);
-			ntid = 0;
+			ntid = T_PARSER_REDUCE_ID(tok);
 			pop  = r_prod.dot;
 			flag = 0;
 		}
@@ -884,6 +895,7 @@ t_parser_parse(T_Parser *parser)
 		T_ParserState *s;
 		T_ParserEdge *e;
 		T_ID eid;
+		int eps_state;
 
 next_state:
 
@@ -912,6 +924,7 @@ next_state:
 #endif
 
 		/*Shift check.*/
+		eps_state = -1;
 		s = state_array_element(decl, top->sid);
 		eid = s->shifts;
 		while(eid != -1){
@@ -924,12 +937,24 @@ next_state:
 
 				T_DEBUG_I("shift to state %d", e->dest);
 				goto next_state;
+			}else if(e->symbol == T_PARSER_EPSILON){
+				eps_state = e->dest;
 			}
 			eid = e->next;
 		}
 
+		/*Epsilon shift.*/
+		if(eps_state != -1){
+			parser->fetched_v.sid = eps_state;
+			if((r = value_queue_push_back(parser, &parser->fetched_v)) < 0)
+				return r;
+
+			T_DEBUG_I("shift to state %d", eps_state);
+			goto next_state;
+		}
+
 		/*Reduce check.*/
-		if(s->reduce != -1){
+		if(s->reduce != T_PARSER_REDUCE_NONE){
 			int rid;
 			int tid;
 			int pop;
@@ -953,7 +978,7 @@ next_state:
 
 			reduce = T_PARSER_REDUCE(rid);
 
-			T_DEBUG_I("reduce %d use rule %08x", pop, reduce);
+			T_DEBUG_I("reduce %d use rule %08x token %08x", pop, reduce, tok);
 
 			if(rfunc){
 				if((r = rfunc(udata, parser, reduce, &pv.value)) < 0)
@@ -974,7 +999,14 @@ next_state:
 
 			value_queue_pop_back_n(parser, pop);
 
+			if((tok == T_PARSER_NONTERM_MIN) && (fetched_tok == T_LEX_EOF)){
+				T_DEBUG_I("accept");
+				return T_OK;
+			}
+
 			top = value_queue_back(parser, 0);
+
+			T_DEBUG_I("pop back to state %d", top->sid);
 
 			s = state_array_element(decl, top->sid);
 			eid = s->jumps;
@@ -991,9 +1023,6 @@ next_state:
 				eid = e->next;
 			}
 		}
-
-		if((value_queue_length(parser) == 1) && (fetched_tok == T_LEX_EOF))
-			return T_OK;
 
 error:
 		if(!error){

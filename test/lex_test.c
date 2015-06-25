@@ -8,7 +8,9 @@ enum{
 	WHILE,
 	INT,
 	FLOAT,
-	ID
+	ID,
+	A,
+	AAAA
 };
 
 const char*
@@ -20,7 +22,9 @@ name[] = {
 	"while",
 	"int",
 	"float",
-	"id"
+	"id",
+	"a",
+	"aaaa"
 };
 
 int main(int argc, char **argv)
@@ -38,12 +42,14 @@ int main(int argc, char **argv)
 	t_lex_decl_add_rule(l_decl, 0, "\"else\"", -1, ELSE, 0, NULL);
 	t_lex_decl_add_rule(l_decl, 0, "\"do\"", -1, DO, 0, NULL);
 	t_lex_decl_add_rule(l_decl, 0, "\"while\"", -1, WHILE, 0, NULL);
+	t_lex_decl_add_rule(l_decl, 0, "\"aaaa\"", -1, AAAA, 0, NULL);
+	t_lex_decl_add_rule(l_decl, 0, "\"a\"", -1, A, 0, NULL);
 	t_lex_decl_add_rule(l_decl, 0, "[[:alpha:]_][[:alnum:]_]*", -1, ID, 0, NULL);
 	t_lex_decl_build(l_decl);
 
 	lex = t_lex_create(l_decl);
 
-	t_lex_push_text(lex, "if 0 else do while 3.1415926 myvar _var _var1 __vv", -1, NULL, NULL);
+	t_lex_push_text(lex, "if 0 else do while 3.1415926 myvar _var _var1 __vv aaa", -1, NULL, NULL);
 
 	do{
 		tok = t_lex_lex(lex, &loc);

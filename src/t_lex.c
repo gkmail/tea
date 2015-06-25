@@ -344,18 +344,23 @@ t_lex_lex(T_Lex *lex, T_LexLoc *loc)
 	T_AutoState *s;
 	T_AutoEdge *e;
 	int sym;
-	int old_text_len;
+	int sym_cnt;
+	int match_sym_cnt;
+	int match_data;
+	T_Bool have_bol;
 	T_Bool first;
 
 	T_ASSERT(lex);
 
 retry:
 	first = T_TRUE;
+	sym_cnt = 0;
+	match_sym_cnt = 0;
+	match_data = -1;
+	have_bol = T_FALSE;
 
 	if(!lex->more)
 		text_array_reinit(lex);
-
-	old_text_len = text_array_length(lex);
 
 	dfa = cond_array_element(lex->decl, lex->curr_cond);
 	sid = 0;
@@ -382,6 +387,18 @@ next_state:
 		T_DEBUG_I("state %d symbol %d", sid, sym);
 
 		s = &dfa->states.buff[sid];
+
+		if(s->data != -1){
+			match_sym_cnt = sym_cnt;
+			match_data = s->data;
+			have_bol = T_FALSE;
+		}
+
+		if(sym >= 0)
+			sym_cnt++;
+		else if(sym == T_LEX_BOL)
+			have_bol = T_TRUE;
+
 		eid = s->edges;
 		eol_sid = -1;
 
@@ -412,13 +429,23 @@ next_state:
 			goto next_state;
 		}
 
-		if(s->data != -1){
-			lex_unget(lex, sym);
-			tok = s->data;
+		if(match_data != -1){
+			int cnt = sym_cnt - match_sym_cnt;
+
+			while(cnt--){
+				sym = lex->text.buff[lex->text.nmem - 1];
+				lex_unget(lex, sym);
+			}
+
+			if(have_bol){
+				lex_unget(lex, T_LEX_BOL);
+			}
+
+			tok = match_data;
 			break;
 		}
 
-		if((sym == T_LEX_EOF) && (text_array_length(lex) == old_text_len)){
+		if((sym == T_LEX_EOF) && !sym_cnt){
 			tok = T_LEX_EOF;
 		}else{
 			tok = T_ERR_SYNTAX;

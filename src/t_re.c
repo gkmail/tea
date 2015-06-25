@@ -1213,7 +1213,7 @@ re_parse_series(ReInput *inp, T_Auto *aut, T_ReMach *mach)
 		ch = re_getch(inp);
 		re_unget(inp, ch);
 
-		if((ch == '|') || (ch == ')') || (ch == -1))
+		if((ch == '|') || (ch == ')') || (ch == '$') || (ch == -1))
 			break;
 
 		if((r = re_parse_single(inp, aut, &mnext)) < 0)
@@ -1710,13 +1710,18 @@ sym_sgrp_set_add_symbol(SymSGrpSet *set, int symbol, int dest)
 			int old_min, old_max;
 
 			pss = sym_sgrp_set_element(set, id);
+
+			if((pss->symbol == T_RE_EOL) || (pss->symbol == T_RE_BOL))
+				continue;
+
 			old_min = T_SYM_MIN(pss->symbol);
 			old_max = T_SYM_MAX(pss->symbol);
 
 			if(max < old_min)
 				break;
 
-			if(((min >= old_min) && (min <= old_max)) || ((max >= old_min) && (max <= old_max))){
+			if(((min >= old_min) && (min <= old_max)) || ((max >= old_min) && (max <= old_max)) ||
+						((min < old_min) && (max > old_max))){
 				int omin, omax;
 				SGroup *sgrp;
 
@@ -1970,7 +1975,7 @@ t_re_to_dfa(T_Re *nfa, T_Re *dfa)
 
 	T_DEBUG_I("DFA:");
 #ifdef T_ENABLE_DEBUG
-	t_auto_dump(nfa);
+	t_auto_dump(dfa);
 #endif
 
 	return T_OK;
