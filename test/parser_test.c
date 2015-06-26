@@ -141,7 +141,7 @@ int main(int argc, char **argv)
 	parser = t_parser_create(p_decl, lex);
 	t_parser_set_func(parser, value_func, reduce_func, error_func, NULL);
 
-	t_lex_push_text(lex, "100 + 3.14 * 2 - 100 / 50", -1, NULL, NULL);
+	t_lex_push_text(lex, "100 + 3.14 * 2 - 100 / 50", -1, NULL, NULL, NULL);
 	t_parser_parse(parser);
 
 	t_parser_destroy(parser);

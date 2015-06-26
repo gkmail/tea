@@ -200,7 +200,7 @@ t_lex_deinit(T_Lex *lex)
 #include <t_alloc.h>
 
 T_Result
-t_lex_push_text(T_Lex *lex, const char *text, int len, T_LexCloseFunc close, void *user_data)
+t_lex_push_text(T_Lex *lex, const char *text, int len, T_LexCloseFunc close, void *user_data, void *loc_data)
 {
 	T_LexInput *inp;
 
@@ -218,6 +218,7 @@ t_lex_push_text(T_Lex *lex, const char *text, int len, T_LexCloseFunc close, voi
 	inp->input  = NULL;
 	inp->close  = close;
 	inp->user_data = user_data;
+	inp->loc_data  = loc_data;
 
 	input_slist_push(lex, inp);
 
@@ -225,7 +226,7 @@ t_lex_push_text(T_Lex *lex, const char *text, int len, T_LexCloseFunc close, voi
 }
 
 T_Result
-t_lex_push_input(T_Lex *lex, T_LexInputFunc input, T_LexCloseFunc close, void *user_data)
+t_lex_push_input(T_Lex *lex, T_LexInputFunc input, T_LexCloseFunc close, void *user_data, void *loc_data)
 {
 	T_LexInput *inp;
 
@@ -237,6 +238,7 @@ t_lex_push_input(T_Lex *lex, T_LexInputFunc input, T_LexCloseFunc close, void *u
 	inp->input  = input;
 	inp->close  = close;
 	inp->user_data = user_data;
+	inp->loc_data  = loc_data;
 
 	input_slist_push(lex, inp);
 
@@ -377,7 +379,7 @@ next_state:
 				if(inp){
 					loc->first_lineno = inp->lineno;
 					loc->first_column = inp->column;
-					loc->user_data = inp->user_data;
+					loc->user_data    = inp->loc_data;
 				}
 			}
 
@@ -459,7 +461,7 @@ next_state:
 			if(first){
 				loc->first_lineno = inp->lineno;
 				loc->first_column = inp->column;
-				loc->user_data = inp->user_data;
+				loc->user_data    = inp->loc_data;
 			}
 			loc->last_lineno = inp->lineno;
 			loc->last_column = inp->column;

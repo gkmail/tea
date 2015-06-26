@@ -61,6 +61,7 @@ struct T_LexInput_s{
 	T_LexInputFunc input;
 	T_LexCloseFunc close;
 	void          *user_data;
+	void          *loc_data;
 };
 
 typedef struct{
@@ -82,8 +83,8 @@ extern T_Result   t_lex_init(T_Lex *lex, T_LexDecl *decl);
 extern void       t_lex_deinit(T_Lex *lex);
 extern T_Lex*     t_lex_create(T_LexDecl *decl);
 extern void       t_lex_destroy(T_Lex *lex);
-extern T_Result   t_lex_push_text(T_Lex *lex, const char *text, int len, T_LexCloseFunc close, void *user_data);
-extern T_Result   t_lex_push_input(T_Lex *lex, T_LexInputFunc input, T_LexCloseFunc close, void *user_data);
+extern T_Result   t_lex_push_text(T_Lex *lex, const char *text, int len, T_LexCloseFunc close, void *user_data, void *loc_data);
+extern T_Result   t_lex_push_input(T_Lex *lex, T_LexInputFunc input, T_LexCloseFunc close, void *user_data, void *loc_data);
 extern void       t_lex_pop_input(T_Lex *lex);
 extern T_LexToken t_lex_lex(T_Lex *lex, T_LexLoc *loc);
 extern T_Result   t_lex_set_cond(T_Lex *lex, T_LexCond cond);

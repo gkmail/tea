@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 
 	lex = t_lex_create(l_decl);
 
-	t_lex_push_text(lex, "if 0 else do while 3.1415926 myvar _var _var1 __vv aaa", -1, NULL, NULL);
+	t_lex_push_text(lex, "if 0 else do while 3.1415926 myvar _var _var1 __vv aaa", -1, NULL, NULL, NULL);
 
 	do{
 		tok = t_lex_lex(lex, &loc);

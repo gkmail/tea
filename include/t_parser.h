@@ -47,8 +47,8 @@ extern "C" {
 #define T_PARSER_REDUCE(id)    ((id)+T_PARSER_REDUCE_MIN)
 #define T_PARSER_REDUCE_ID(n)  ((n)-T_PARSER_REDUCE_MIN)
 
-#define T_PARSER_PRIO_LEFT  0
-#define T_PARSER_PRIO_RIGHT 1
+#define T_PARSER_PRIO_LEFT  1
+#define T_PARSER_PRIO_RIGHT 0
 #define T_PARSER_PRIO(v, d)    (((v)*2+T_PARSER_PRIO_BEGIN)|(d))
 #define T_PARSER_PRIO_DIR(p)   ((p)&1)
 #define T_PARSER_PRIO_VALUE(p) ((p)&~1)
