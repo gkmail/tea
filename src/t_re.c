@@ -65,12 +65,12 @@ predef_sets[] = {
 	{"lower", "[a-z]"},
 	{"upper", "[A-Z]"},
 	{"blank", "[ \\t]"},
-	{"cntrl", "[\\x00-\\x1f\\x7f-\\xff]"},
+	{"cntrl", "[^\\x20-\\x7e]"},
 	{"graph", "[\\x21-\\x7e]"},
 	{"print", "[\\x20-\\x7e]"},
 	{"punct", "[\\x21-\\x2f\\x3a-\\x40\\x5b-\\x60\\x7b-\\x7e]"},
 	{"space", "[ \\f\\n\\r\\t\\v]"},
-	{"xdigit","0-9a-fA-F"},
+	{"xdigit","[0-9a-fA-F]"},
 	{NULL, NULL}
 };
 
@@ -831,7 +831,7 @@ re_parse_char(ReInput *inp, ReParseStatus status)
 						case '$':
 						case '\"':
 							re_unget(inp, ch);
-							break;
+							return T_ERR_EMPTY;
 						default:
 							r = ch;
 							break;
@@ -1216,7 +1216,10 @@ re_parse_series(ReInput *inp, T_Auto *aut, T_ReMach *mach)
 		if((ch == '|') || (ch == ')') || (ch == '$') || (ch == -1))
 			break;
 
-		if((r = re_parse_single(inp, aut, &mnext)) < 0)
+		r = re_parse_single(inp, aut, &mnext);
+		if(r == T_ERR_EMPTY)
+			return T_OK;
+		else if(r < 0)
 			return r;
 
 		if((r = t_re_mach_link(aut, mach, &mnext)) < 0)
@@ -1232,7 +1235,8 @@ re_parse(ReInput *inp, T_Auto *aut, T_ReMach *mach)
 	T_Result r;
 	int ch;
 
-	if((r = re_parse_series(inp, aut, mach)) < 0)
+	r = re_parse_series(inp, aut, mach);
+	if((r < 0) && (r != T_ERR_EMPTY))
 		return r;
 
 	while(1){
@@ -1242,7 +1246,8 @@ re_parse(ReInput *inp, T_Auto *aut, T_ReMach *mach)
 
 			T_DEBUG_I("|");
 
-			if((r = re_parse_series(inp, aut, &mnext)) < 0)
+			r = re_parse_series(inp, aut, &mnext);
+			if((r < 0) && (r != T_ERR_EMPTY))
 				return r;
 
 			if((r = t_re_mach_or(aut, mach, &mnext)) < 0)
