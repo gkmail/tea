@@ -1073,10 +1073,10 @@ t_parser_get_loc(T_Parser *parser, int n, T_LexLoc *loc)
 {
 	T_ParserValue *pv;
 
-	T_ASSERT(parser && loc && (n >= 0) && (n < parser->reduce_count));
+	T_ASSERT(parser && loc);
 
-	if(n >= value_queue_length(parser))
-		return T_ERR_ARG;
+	if((n >= value_queue_length(parser)) || (n < 0) || (n >= parser->reduce_count))
+		return T_ERR_OVERFLOW;
 
 	pv = value_queue_back(parser, parser->reduce_count - n - 1);
 	*loc = pv->loc;
@@ -1089,10 +1089,10 @@ t_parser_get_value(T_Parser *parser, int n, void **value)
 {
 	T_ParserValue *pv;
 
-	T_ASSERT(parser && value && (n >= 0) && (n < parser->reduce_count));
+	T_ASSERT(parser && value);
 
-	if(n >= value_queue_length(parser))
-		return T_ERR_ARG;
+	if((n >= value_queue_length(parser)) || (n < 0) || (n >= parser->reduce_count))
+		return T_ERR_OVERFLOW;
 
 	pv = value_queue_back(parser, parser->reduce_count - n - 1);
 	*value= pv->value;

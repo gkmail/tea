@@ -117,7 +117,7 @@ lex_input_create(int flags)
 	inp->b_pos  = 0;
 
 	if(flags & T_LEX_FL_INTERNAL_BUF){
-		inp->b_buf = (char*)malloc(T_LEX_BUF_SIZE);
+		inp->b_buf = (unsigned char*)malloc(T_LEX_BUF_SIZE);
 		if(!inp->b_buf){
 			free(inp);
 			return NULL;
@@ -209,7 +209,7 @@ t_lex_push_text(T_Lex *lex, const char *text, int len, T_LexCloseFunc close, voi
 	if(!(inp = lex_input_create(0)))
 		return T_ERR_NOMEM;
 
-	inp->b_buf  = (char*)text;
+	inp->b_buf  = (unsigned char*)text;
 	inp->b_size = len;
 	if(len < 0)
 		inp->b_size = strlen(text);
@@ -275,7 +275,7 @@ lex_getch(T_Lex *lex)
 
 	if(inp->b_count <= 0){
 		if(inp->flags & T_LEX_FL_INTERNAL_BUF){
-			r = inp->input(inp->user_data, inp->b_buf + T_LEX_UNGET_SIZE, inp->b_size - T_LEX_UNGET_SIZE);
+			r = inp->input(inp->user_data, (char*)inp->b_buf + T_LEX_UNGET_SIZE, inp->b_size - T_LEX_UNGET_SIZE);
 			if(r < 0)
 				return r;
 			if(r == 0)
@@ -374,12 +374,13 @@ next_state:
 		sym = lex_getch(lex);
 
 		if(first && (sym >= 0)){
-			if(loc){
+			if(!lex->more){
 				inp = input_slist_top(lex);
+
 				if(inp){
-					loc->first_lineno = inp->lineno;
-					loc->first_column = inp->column;
-					loc->user_data    = inp->loc_data;
+					lex->loc.first_lineno = inp->lineno;
+					lex->loc.first_column = inp->column;
+					lex->loc.user_data    = inp->loc_data;
 				}
 			}
 
@@ -455,23 +456,29 @@ next_state:
 		break;
 	}
 
-	if(loc){
-		inp = input_slist_top(lex);
-		if(inp){
-			if(first){
-				loc->first_lineno = inp->lineno;
-				loc->first_column = inp->column;
-				loc->user_data    = inp->loc_data;
+	inp = input_slist_top(lex);
+	if(inp){
+		if(first){
+			if(!lex->more){
+				lex->loc.first_lineno = inp->lineno;
+				lex->loc.first_column = inp->column;
+				lex->loc.user_data    = inp->loc_data;
 			}
-			loc->last_lineno = inp->lineno;
-			loc->last_column = inp->column;
 		}
+		lex->loc.last_lineno = inp->lineno;
+		lex->loc.last_column = inp->column;
 	}
+
+	if(loc)
+		*loc = lex->loc;
 
 	lex->more = T_FALSE;
 
 	if(tok == 0)
 		goto retry;
+
+	T_DEBUG_I("lex token %d, %d.%d-%d.%d", tok, loc->first_lineno, loc->first_column,
+				loc->last_lineno, loc->last_column);
 
 	return tok;
 }
@@ -506,7 +513,7 @@ t_lex_get_text(T_Lex *lex)
 		lex->text.buff[lex->text.nmem] = 0;
 	}
 
-	return lex->text.buff;
+	return (char*)lex->text.buff;
 }
 
 void

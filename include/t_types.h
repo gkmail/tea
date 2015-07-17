@@ -38,7 +38,8 @@ typedef enum{
 	T_ERR_IO       = -1005,
 	T_ERR_UNDEF    = -1006,
 	T_ERR_SYSTEM   = -1007,
-	T_ERR_EMPTY    = -1008
+	T_ERR_EMPTY    = -1008,
+	T_ERR_OVERFLOW = -1009
 }T_Result;
 
 typedef int    T_ID;

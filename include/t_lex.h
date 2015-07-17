@@ -54,7 +54,7 @@ struct T_LexInput_s{
 	int          column;
 	int          last_column;
 	int          flags;
-	char        *b_buf;
+	unsigned char *b_buf;
 	int          b_size;
 	int          b_pos;
 	int          b_count;
@@ -70,6 +70,7 @@ typedef struct{
 	T_Bool         more;
 	T_SLIST_DECL(T_LexInput, inputs);
 	T_ARRAY_DECL(char, text);
+	T_LexLoc       loc;
 }T_Lex;
 
 extern T_Result   t_lex_decl_init(T_LexDecl *decl);
