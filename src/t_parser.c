@@ -124,6 +124,8 @@ t_parser_decl_init(T_ParserDecl *decl)
 	state_array_init(decl);
 	edge_array_init(decl);
 
+	decl->prod_check = NULL;
+
 	return T_OK;
 }
 
@@ -238,16 +240,8 @@ error:
 	return r;
 }
 
-typedef struct{
-	int rule_id;
-	int expr_id;
-	int dot;
-}Prod;
-
-typedef struct{
-	T_SET_DECL(Prod, prods);
-	int sid;
-}Closure;
+typedef T_ParserProd    Prod;
+typedef T_ParserClosure Closure;
 
 #define T_SET_TYPE        Closure
 #define T_SET_ELEM_TYPE   Prod
@@ -328,43 +322,50 @@ add_rule_prods(T_ParserDecl *decl, Closure *prods, int id, ProdQueue *q, SymClos
 	expr_array_iter_first(rule, &iter);
 	while(!expr_array_iter_last(&iter)){
 		int len;
+		T_Bool add = T_TRUE;
 
 		expr = expr_array_iter_data(&iter);
 
-		if((r = prod_set_add(prods, &prod, NULL)) < 0)
-			return r;
-
-		if(r > 0){
-			T_DEBUG_I("add prod rule:%d expr:%d dot:%d", prod.rule_id, prod.expr_id, prod.dot);
-			if((r = prod_queue_push_back(q, &prod)) < 0)
-				return r;
+		if(decl->prod_check) {
+			add = decl->prod_check(decl, prods, &prod);
 		}
 
-		len = token_array_length(expr);
-		if(len == 1){
-			T_ParserToken eps = T_PARSER_EPSILON;
-			Prod nprod;
-			SymClosHashEntry *hent;
-			Closure *nclos;
-
-			T_DEBUG_I("epsilon");
-
-			if((r = sym_clos_hash_add_entry(c_hash, &eps, &hent)) < 0)
+		if(add){
+			if((r = prod_set_add(prods, &prod, NULL)) < 0)
 				return r;
-
-			nclos = &hent->data;
 
 			if(r > 0){
-				prod_set_init(nclos);
-				nclos->sid = 0;
+				T_DEBUG_I("add prod rule:%d expr:%d dot:%d", prod.rule_id, prod.expr_id, prod.dot);
+				if((r = prod_queue_push_back(q, &prod)) < 0)
+					return r;
 			}
 
-			nprod.rule_id = prod.rule_id;
-			nprod.expr_id = prod.expr_id;
-			nprod.dot     = 1;
+			len = token_array_length(expr);
+			if(len == 1){
+				T_ParserToken eps = T_PARSER_EPSILON;
+				Prod nprod;
+				SymClosHashEntry *hent;
+				Closure *nclos;
 
-			if((r = prod_set_add(nclos, &nprod, NULL)) < 0)
-				return r;
+				T_DEBUG_I("epsilon");
+
+				if((r = sym_clos_hash_add_entry(c_hash, &eps, &hent)) < 0)
+					return r;
+
+				nclos = &hent->data;
+
+				if(r > 0){
+					prod_set_init(nclos);
+					nclos->sid = 0;
+				}
+
+				nprod.rule_id = prod.rule_id;
+				nprod.expr_id = prod.expr_id;
+				nprod.dot     = 1;
+
+				if((r = prod_set_add(nclos, &nprod, NULL)) < 0)
+					return r;
+			}
 		}
 
 		expr_array_iter_next(&iter);
@@ -522,7 +523,17 @@ clos_build(T_ParserDecl *decl, T_ID clos_id, ClosArray *c_array)
 
 			tok = *token_array_element(expr, prod->dot);
 
-			if(prod->dot + 1 < token_array_length(expr)){
+			if(T_PARSER_IS_REDUCE(tok)){
+				/*Reduce*/
+				if(r_prod.rule_id != -1){
+					T_DEBUG_W("reduce/reduce conflict");
+					prod_dump(decl, &r_prod);
+					prod_dump(decl, prod);
+				}else{
+					r_prod = *prod;
+					r_tok  = tok;
+				}
+			} else if(prod->dot + 1 < token_array_length(expr)){
 				/*Add the next production.*/
 				nprod.rule_id = prod->rule_id;
 				nprod.expr_id = prod->expr_id;
@@ -542,18 +553,6 @@ clos_build(T_ParserDecl *decl, T_ID clos_id, ClosArray *c_array)
 
 				if((r = prod_set_add(nclos, &nprod, NULL)) < 0)
 					goto end;
-			}
-
-			if(T_PARSER_IS_REDUCE(tok)){
-				/*Reduce*/
-				if(r_prod.rule_id != -1){
-					T_DEBUG_W("reduce/reduce conflict");
-					prod_dump(decl, &r_prod);
-					prod_dump(decl, prod);
-				}else{
-					r_prod = *prod;
-					r_tok  = tok;
-				}
 			}
 		}
 

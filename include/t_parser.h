@@ -81,15 +81,31 @@ typedef struct{
 }T_ParserEdge;
 
 typedef struct{
-	T_ARRAY_DECL(T_ParserRule, rules);
-	T_ARRAY_DECL(T_ParserState, states);
-	T_ARRAY_DECL(T_ParserEdge, edges);
-}T_ParserDecl;
+	int rule_id;
+	int expr_id;
+	int dot;
+}T_ParserProd;
 
+typedef struct{
+	T_SET_DECL(T_ParserProd, prods);
+	int sid;
+}T_ParserClosure;
+
+typedef struct T_ParserDecl_s T_ParserDecl;
 typedef struct T_Parser_s T_Parser;
+
 typedef T_LexToken (*T_ParserValueFunc)(void *user_data, T_Parser *parser, T_LexToken tok, void **pv);
 typedef T_Result   (*T_ParserReduceFunc)(void *user_data, T_Parser *parser, T_ParserReduce reduce, void **value);
 typedef void       (*T_ParserErrorFunc)(void *user_data, T_Parser *parser);
+
+typedef T_Bool     (*T_ParserProdCheckFunc)(T_ParserDecl *decl, T_ParserClosure *clos, T_ParserProd *prod);
+
+struct T_ParserDecl_s{
+	T_ARRAY_DECL(T_ParserRule, rules);
+	T_ARRAY_DECL(T_ParserState, states);
+	T_ARRAY_DECL(T_ParserEdge, edges);
+	T_ParserProdCheckFunc prod_check;
+};
 
 typedef struct{
 	T_LexLoc            loc;

@@ -773,7 +773,25 @@ re_parse_char(ReInput *inp, ReParseStatus status)
 					ch = re_getch(inp);
 					if(!isxdigit(ch))
 						return T_ERR_SYNTAX;
-					r += char_to_hex(ch);	
+					r += char_to_hex(ch);
+					break;
+				case 'u':
+					ch = re_getch(inp);
+					if(!isxdigit(ch))
+						return T_ERR_SYNTAX;
+					r = char_to_hex(ch) * 4096;
+					ch = re_getch(inp);
+					if(!isxdigit(ch))
+						return T_ERR_SYNTAX;
+					r += char_to_hex(ch) * 256;
+					ch = re_getch(inp);
+					if(!isxdigit(ch))
+						return T_ERR_SYNTAX;
+					r += char_to_hex(ch) * 16;
+					ch = re_getch(inp);
+					if(!isxdigit(ch))
+						return T_ERR_SYNTAX;
+					r += char_to_hex(ch);
 					break;
 				case '0':
 					r = 0;
