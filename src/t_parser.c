@@ -465,6 +465,7 @@ clos_build(T_ParserDecl *decl, T_ID clos_id, ClosArray *c_array)
 	T_Result r;
 	T_ParserReduce r_tok;
 	Prod r_prod;
+	T_Bool r_full = T_TRUE;
 
 	clos = clos_array_element(c_array, clos_id);
 
@@ -532,27 +533,59 @@ clos_build(T_ParserDecl *decl, T_ID clos_id, ClosArray *c_array)
 				}else{
 					r_prod = *prod;
 					r_tok  = tok;
+					r_full = (prod->dot == token_array_length(expr) - 1);
+
+					if (!r_full) {
+						int rt = T_PARSER_NONTERM_REDUCE;
+
+						/*Add the next production.*/
+						nprod.rule_id = prod->rule_id;
+						nprod.expr_id = prod->expr_id;
+						nprod.dot     = prod->dot + 1;
+
+						T_DEBUG_I("symbol:%08x -> prod rule:%d expr:%d dot:%d", rt, nprod.rule_id, nprod.expr_id, nprod.dot);
+
+						if((r = sym_clos_hash_add_entry(&c_hash, &rt, &hent)) < 0)
+							goto end;
+
+						nclos = &hent->data;
+
+						if(r > 0){
+							prod_set_init(nclos);
+							nclos->sid = 0;
+						}
+
+						if((r = prod_set_add(nclos, &nprod, NULL)) < 0)
+							goto end;
+					}
 				}
 			} else if(prod->dot + 1 < token_array_length(expr)){
-				/*Add the next production.*/
-				nprod.rule_id = prod->rule_id;
-				nprod.expr_id = prod->expr_id;
-				nprod.dot     = prod->dot + 1;
 
-				T_DEBUG_I("symbol:%08x -> prod rule:%d expr:%d dot:%d", tok, nprod.rule_id, nprod.expr_id, nprod.dot);
+				if ((r_prod.rule_id != -1) && !r_full){
+					T_DEBUG_W("shift/reduce conflict");
+					prod_dump(decl, &r_prod);
+					prod_dump(decl, prod);
+				} else {
+					/*Add the next production.*/
+					nprod.rule_id = prod->rule_id;
+					nprod.expr_id = prod->expr_id;
+					nprod.dot     = prod->dot + 1;
 
-				if((r = sym_clos_hash_add_entry(&c_hash, &tok, &hent)) < 0)
-					goto end;
+					T_DEBUG_I("symbol:%08x -> prod rule:%d expr:%d dot:%d", tok, nprod.rule_id, nprod.expr_id, nprod.dot);
 
-				nclos = &hent->data;
+					if((r = sym_clos_hash_add_entry(&c_hash, &tok, &hent)) < 0)
+						goto end;
 
-				if(r > 0){
-					prod_set_init(nclos);
-					nclos->sid = 0;
+					nclos = &hent->data;
+
+					if(r > 0){
+						prod_set_init(nclos);
+						nclos->sid = 0;
+					}
+
+					if((r = prod_set_add(nclos, &nprod, NULL)) < 0)
+						goto end;
 				}
-
-				if((r = prod_set_add(nclos, &nprod, NULL)) < 0)
-					goto end;
 			}
 		}
 
